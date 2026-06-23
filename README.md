@@ -110,9 +110,50 @@ sudo /opt/market-monitor/scripts/backup-data.sh
 
 ---
 
-## Deploy on GCP (recommended)
+## Deploy on GCP
 
-**OS:** Rocky Linux 9 or AlmaLinux 9
+### Option A — Always Free (e2-micro, $0/month)
+
+GCP only gives a **free VM in US regions**, not Mumbai. Change these settings in the Create Instance screen:
+
+| Setting | Your screenshot (paid) | Free tier (change to) |
+|---------|------------------------|------------------------|
+| **Region** | asia-south1 (Mumbai) | **us-central1** (Iowa) or us-west1 / us-east1 |
+| **Zone** | asia-south1-b | any zone in that region (e.g. us-central1-a) |
+| **Machine type** | e2-medium (2 vCPU, 4 GB) | **e2-micro** (2 vCPU, 1 GB RAM) |
+| **Boot disk** | 10 GB balanced | **30 GB Standard persistent disk** (pd-standard) |
+| **Preemptible** | Off | **Off** (must stay off) |
+
+**OS:** Rocky Linux 9 or AlmaLinux 9 (for RPM setup script). Debian also works with Docker.
+
+**Networking:** check **Allow HTTP traffic** (opens port 80).
+
+**Monthly estimate** should show **$0.00** (or only tiny egress if you exceed 1 GB/month).
+
+> **Trade-off:** Mumbai = lower latency to India but **not free**. US region = **free forever** but slightly higher latency for Indian market data (usually fine).
+
+**1 GB RAM tip:** add swap before install (RPM build needs memory):
+
+```bash
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+Then install Shizu:
+
+```bash
+git clone https://github.com/ssayyad786/shizu.git
+cd shizu
+sudo bash scripts/setup-gcp-instance.sh
+```
+
+**Alternative:** use **$300 free trial** (90 days) to run e2-medium in Mumbai — paid after trial ends unless you resize/move to e2-micro US.
+
+---
+
+### Option B — Standard deploy (paid, any region)
+
+**OS:** Rocky Linux 9 or AlmaLinux 9 · **Machine:** e2-small or e2-medium · **Region:** asia-south1 OK
 
 ```bash
 git clone https://github.com/ssayyad786/shizu.git
