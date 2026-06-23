@@ -1,0 +1,12 @@
+# Shizu project rules
+
+When making code changes, always update README.md in the same change:
+
+- **Application status** table — version, features, deploy method
+- **Algorithm** — if indicators, weights, or trade plan logic change
+- **API reference** — if routes are added or removed
+- **Data persistence** — if paths or backup behavior change
+- **Project structure** — if files or folders are added
+- **Maintainer notes** section — already lists what to sync
+
+README is the single source of truth for application status.

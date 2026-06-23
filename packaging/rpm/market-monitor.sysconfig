@@ -1,0 +1,5 @@
+# Market Monitor environment (sourced by systemd)
+# All user data (wishlist, trade history) lives here — safe across upgrades.
+MARKET_DATA_DIR=/var/lib/market-monitor
+MARKET_HOST=127.0.0.1
+MARKET_PORT=8000
