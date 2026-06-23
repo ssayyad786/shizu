@@ -97,8 +97,16 @@ export default function App() {
       await api.addToWishlist(symbol, market, name);
       setActiveMarket(market);
       await loadWishlist();
-      await api.triggerScan();
-      await refreshSignals();
+      try {
+        await api.triggerScan();
+        await refreshSignals();
+      } catch (scanErr) {
+        setError(
+          scanErr instanceof Error
+            ? `Added ${symbol}, but scan failed: ${scanErr.message}`
+            : `Added ${symbol}, but scan failed`
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add");
       throw e;

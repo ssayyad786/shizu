@@ -2,6 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -61,7 +62,11 @@ def add_to_wishlist(body: WishlistCreate, db: Session = Depends(get_db)):
 
     item = WishlistItem(symbol=symbol, market=market, name=body.name)
     db.add(item)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(409, f"{symbol} is already in your {market} wishlist") from e
     db.refresh(item)
     return item
 
