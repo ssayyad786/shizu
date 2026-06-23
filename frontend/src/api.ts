@@ -141,10 +141,19 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, options);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || "Request failed");
+    const detail = err.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d: { msg?: string }) => d.msg || String(d)).join(", ")
+          : res.statusText;
+    throw new Error(message || "Request failed");
   }
   return res.json();
 }
+
+export type StockSelection = { symbol: string; market: Market };
 
 export function currencyForMarket(market: Market): string {
   return market === "IN" ? "₹" : "$";

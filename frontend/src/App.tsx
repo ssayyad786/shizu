@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, Market, StockDetail, StockSignal, WishlistItem } from "./api";
+import { api, Market, StockDetail, StockSelection, StockSignal, WishlistItem } from "./api";
 import HelpPanel from "./components/HelpPanel";
 import AppFooter from "./components/AppFooter";
 import HistoryPanel from "./components/HistoryPanel";
@@ -15,6 +15,10 @@ const MARKETS: { id: Market; label: string; flag: string }[] = [
   { id: "IN", label: "India", flag: "🇮🇳" },
 ];
 
+function sameSelection(a: StockSelection | null, b: StockSelection | null) {
+  return a?.symbol === b?.symbol && a?.market === b?.market;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [activeMarket, setActiveMarket] = useState<Market>("US");
@@ -22,10 +26,11 @@ export default function App() {
   const [signals, setSignals] = useState<StockSignal[]>([]);
   const [opportunities, setOpportunities] = useState<StockSignal[]>([]);
   const [lastScan, setLastScan] = useState<string | null>(null);
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [selected, setSelected] = useState<StockSelection | null>(null);
   const [stockDetail, setStockDetail] = useState<StockDetail | null>(null);
   const [period, setPeriod] = useState("6mo");
   const [error, setError] = useState("");
+  const [detailError, setDetailError] = useState("");
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
 
@@ -64,15 +69,18 @@ export default function App() {
     }
   }, []);
 
-  const loadDetail = useCallback(async (symbol: string, p = period) => {
+  const loadDetail = useCallback(async (pick: StockSelection, p = period) => {
     setLoading(true);
-    setError("");
+    setDetailError("");
+    setSelected(pick);
+    setStockDetail(null);
+    setActiveMarket(pick.market);
     try {
-      const detail = await api.getStockDetail(symbol, p);
+      const detail = await api.getStockDetail(pick.symbol, p);
       setStockDetail(detail);
-      setSelectedSymbol(symbol);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load stock");
+      setDetailError(e instanceof Error ? e.message : "Failed to load stock");
+      setStockDetail(null);
     } finally {
       setLoading(false);
     }
@@ -86,10 +94,35 @@ export default function App() {
   }, [loadWishlist, refreshSignals]);
 
   useEffect(() => {
-    if (selectedSymbol) {
-      loadDetail(selectedSymbol, period);
+    if (selected) {
+      loadDetail(selected, period);
     }
   }, [period]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleMarketChange = (market: Market) => {
+    setActiveMarket(market);
+    setError("");
+
+    const items = wishlist.filter((w) => w.market === market);
+    const keep = selected && selected.market === market ? selected : null;
+    const inList = keep && items.some((w) => w.symbol === keep.symbol);
+
+    if (inList && keep) {
+      if (!sameSelection(selected, keep)) {
+        loadDetail(keep, period);
+      }
+      return;
+    }
+
+    if (items.length > 0) {
+      loadDetail({ symbol: items[0].symbol, market: items[0].market }, period);
+      return;
+    }
+
+    setSelected(null);
+    setStockDetail(null);
+    setDetailError("");
+  };
 
   const handleAdd = async (symbol: string, market: Market, name?: string) => {
     setError("");
@@ -107,6 +140,7 @@ export default function App() {
             : `Added ${symbol}, but scan failed`
         );
       }
+      await loadDetail({ symbol, market }, period);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add");
       throw e;
@@ -116,9 +150,10 @@ export default function App() {
   const handleRemove = async (symbol: string, market: Market, e: React.MouseEvent) => {
     e.stopPropagation();
     await api.removeFromWishlist(symbol, market);
-    if (selectedSymbol === symbol) {
-      setSelectedSymbol(null);
+    if (selected?.symbol === symbol && selected.market === market) {
+      setSelected(null);
       setStockDetail(null);
+      setDetailError("");
     }
     await loadWishlist();
     await refreshSignals();
@@ -135,13 +170,12 @@ export default function App() {
   };
 
   const handleSelect = (symbol: string, market: Market) => {
-    setActiveMarket(market);
     setActiveTab("dashboard");
     setPeriod("6mo");
-    loadDetail(symbol, "6mo");
+    loadDetail({ symbol, market }, "6mo");
   };
 
-  const showDetail = activeTab === "dashboard" && selectedSymbol && stockDetail;
+  const showDetail = activeTab === "dashboard" && selected && stockDetail && !detailError;
 
   return (
     <div className="app-shell">
@@ -159,7 +193,7 @@ export default function App() {
             <button
               key={m.id}
               className={`market-tab ${activeMarket === m.id ? "active" : ""}`}
-              onClick={() => setActiveMarket(m.id)}
+              onClick={() => handleMarketChange(m.id)}
             >
               {m.flag} {m.label}
               <span className="market-count">
@@ -183,7 +217,9 @@ export default function App() {
             wishlistForMarket.map((item) => (
               <div
                 key={item.id}
-                className={`wishlist-item ${selectedSymbol === item.symbol ? "active" : ""}`}
+                className={`wishlist-item ${
+                  selected?.symbol === item.symbol && selected.market === item.market ? "active" : ""
+                }`}
                 onClick={() => handleSelect(item.symbol, item.market)}
               >
                 <div>
@@ -231,8 +267,8 @@ export default function App() {
                 ? "Indicator guide"
                 : activeTab === "history"
                   ? "Trade signal history"
-                  : selectedSymbol
-                    ? `${selectedSymbol} — Chart & Analysis`
+                  : selected
+                    ? `${selected.symbol} — Chart & Analysis`
                     : `${activeMarket === "US" ? "US" : "Indian"} dashboard`}
             </h1>
             {activeTab === "dashboard" && (
@@ -270,6 +306,12 @@ export default function App() {
             <>
               {loading && <div style={{ color: "var(--muted)", marginBottom: 16 }}>Loading chart…</div>}
 
+              {detailError && (
+                <div className="error" style={{ marginBottom: 16 }}>
+                  {detailError}
+                </div>
+              )}
+
               {showDetail ? (
                 <StockDetailView
                   detail={stockDetail}
@@ -284,7 +326,7 @@ export default function App() {
                   <SignalTable
                     signals={signalsForMarket}
                     market={activeMarket}
-                    selectedSymbol={selectedSymbol}
+                    selected={selected}
                     onSelect={handleSelect}
                   />
                   {signalsForMarket.length === 0 &&
