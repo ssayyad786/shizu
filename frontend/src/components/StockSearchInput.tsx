@@ -1,18 +1,48 @@
 import { useEffect, useRef, useState } from "react";
-import { api, StockSearchResult } from "../api";
+import { api, Market, StockSearchResult } from "../api";
+
+const INDIAN_EXCHANGES = /^(NSI|BSE|NSE|BOM|NSEI)$/i;
+
+function filterResults(results: StockSearchResult[], market: Market): StockSearchResult[] {
+  if (market === "IN") {
+    return results.filter(
+      (r) =>
+        r.symbol.endsWith(".NS") ||
+        r.symbol.endsWith(".BO") ||
+        INDIAN_EXCHANGES.test(r.exchange)
+    );
+  }
+  return results.filter(
+    (r) =>
+      !r.symbol.endsWith(".NS") &&
+      !r.symbol.endsWith(".BO") &&
+      !INDIAN_EXCHANGES.test(r.exchange)
+  );
+}
 
 interface Props {
-  onAdd: (symbol: string, name?: string) => Promise<void>;
+  market: Market;
+  onAdd: (symbol: string, market: Market, name?: string) => Promise<void>;
   error?: string;
 }
 
-export default function StockSearchInput({ onAdd, error }: Props) {
+export default function StockSearchInput({ market, onAdd, error }: Props) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<StockSearchResult[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const placeholder =
+    market === "IN"
+      ? "Type name or symbol, e.g. Reliance"
+      : "Type name or symbol, e.g. Microsoft";
+
+  const hint =
+    market === "IN"
+      ? "Indian stocks use .NS suffix (e.g. RELIANCE.NS, TCS.NS)"
+      : "US stocks like AAPL, MSFT, TSLA";
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -25,8 +55,9 @@ export default function StockSearchInput({ onAdd, error }: Props) {
       setLoading(true);
       try {
         const data = await api.searchStocks(query);
-        setSuggestions(data.results);
-        setOpen(data.results.length > 0);
+        const filtered = filterResults(data.results, market);
+        setSuggestions(filtered);
+        setOpen(filtered.length > 0);
         setActiveIndex(-1);
       } catch {
         setSuggestions([]);
@@ -37,7 +68,7 @@ export default function StockSearchInput({ onAdd, error }: Props) {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, market]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -53,7 +84,7 @@ export default function StockSearchInput({ onAdd, error }: Props) {
     setQuery("");
     setOpen(false);
     setSuggestions([]);
-    await onAdd(item.symbol, item.name);
+    await onAdd(item.symbol, market, item.name);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,7 +100,7 @@ export default function StockSearchInput({ onAdd, error }: Props) {
     const symbol = trimmed.toUpperCase();
     setQuery("");
     setOpen(false);
-    await onAdd(symbol);
+    await onAdd(symbol, market);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -90,7 +121,7 @@ export default function StockSearchInput({ onAdd, error }: Props) {
     <div className="search-wrapper" ref={wrapperRef}>
       <form className="add-form" onSubmit={handleSubmit}>
         <input
-          placeholder="Type name or symbol, e.g. Microsoft"
+          placeholder={placeholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => suggestions.length > 0 && setOpen(true)}
@@ -127,7 +158,7 @@ export default function StockSearchInput({ onAdd, error }: Props) {
       )}
 
       {error && <div className="error">{error}</div>}
-      <p className="search-hint">Try typing a company name like Microsoft, Apple, or Reliance</p>
+      <p className="search-hint">{hint}</p>
     </div>
   );
 }

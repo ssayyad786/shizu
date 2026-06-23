@@ -68,13 +68,43 @@ const SIGNALS = [
 export default function HelpPanel() {
   return (
     <div className="help-panel">
+      <section className="help-section help-disclaimer">
+        <h2>Important disclaimer</h2>
+        <div className="help-card help-card-disclaimer">
+          <p className="help-what">
+            Shizu is a <strong>learning and research tool</strong>. It is not a brokerage, not a trading
+            platform, and does not provide financial, investment, or tax advice. All signals are generated
+            automatically from public market data and may be wrong or outdated.{" "}
+            <strong>Always do your own research</strong> and consult a qualified professional before
+            investing.
+          </p>
+        </div>
+      </section>
+
       <section className="help-section">
-        <h2>How we analyse stocks</h2>
+        <h2>How we analyze stocks</h2>
         <p>
-          Market Monitor uses a <strong>hybrid multi-indicator scoring system</strong> tuned for
-          <strong> short-term trades (up to 10 days)</strong>. Seven indicators are combined into a weighted score.
-          When a BUY fires, we calculate entry, sell target, and stop loss using ATR (average daily price range).
+          Market Monitor uses a <strong>multi-indicator scoring system</strong> tuned for
+          <strong> short-term ideas (up to 10 calendar days)</strong>. Seven indicators are combined into a
+          weighted score. When a BUY signal fires, we estimate entry, sell target, and stop loss using
+          ATR (average daily price range).
         </p>
+      </section>
+
+      <section className="help-section">
+        <h2>US vs Indian markets</h2>
+        <div className="help-card">
+          <p className="help-what">
+            Use the <strong>US</strong> or <strong>India</strong> tab in the sidebar to maintain separate wishlists.
+            Indian stocks use NSE/BSE symbols with a <strong>.NS</strong> or <strong>.BO</strong> suffix
+            (e.g. <code>RELIANCE.NS</code>, <code>TCS.NS</code>). US stocks use plain tickers
+            (e.g. <code>AAPL</code>, <code>MSFT</code>).
+          </p>
+          <p className="help-chart">
+            The <strong>History</strong> tab also splits by market. Success stats only count trades where
+            the sell target was hit inside the hold window.
+          </p>
+        </div>
       </section>
 
       <section className="help-section">
@@ -84,11 +114,13 @@ export default function HelpPanel() {
             <strong>Buy at:</strong> current price when the signal fires.<br />
             <strong>Sell target:</strong> entry + 1.5× ATR (BUY) or 2× ATR (STRONG BUY).<br />
             <strong>Stop loss:</strong> entry − 1× ATR (limits loss if wrong).<br />
-            <strong>Hold period:</strong> 10 trading days — then marked expired with final result.
+            <strong>Hold period:</strong> {10} calendar days — window ends at end of that day.
+            Outcome checks start from the <strong>next trading day</strong> (daily data).
           </p>
           <p className="help-chart">
-            All buy signals are saved in the <strong>History</strong> tab. We check daily if price hit your target
-            (✅ win) or stop (❌ loss), and show win rate over time.
+            All buy signals are saved in the <strong>History</strong> tab per market. A trade is
+            <strong> successful</strong> only if the sell target is hit before the window ends.
+            Stop loss, or expiry without target, is not counted as success.
           </p>
         </div>
       </section>

@@ -172,25 +172,110 @@ Open in browser: **http://YOUR_EXTERNAL_IP/**
 
 ---
 
-## Part 7 — Domain + HTTPS (optional, after buying domain)
+## Part 7 — Static IP + domain (shizu.space) + HTTPS
 
-### 7.1 GoDaddy DNS
+### Why static IP?
 
-| Type | Name | Value |
-|------|------|-------|
-| A | `@` | Your VM external IP |
-| A | `www` | Your VM external IP |
+GCP gives your VM a **temporary (ephemeral) IP** by default. If you **Stop** then **Start** the VM, that IP **changes** and your domain breaks.
 
-Wait 5–30 minutes for DNS to propagate.
+**Fix:** Reserve a **Static external IP** once — then stop/start works with no extra steps.
 
-### 7.2 Free SSL on VM
+> Static IPs are **free while attached** to a running VM. If you reserve one but leave it unused, GCP may charge a small fee.
+
+---
+
+### 7.1 Reserve static IP (GCP Console) — do this first
+
+1. **VPC network** → **IP addresses** → **RESERVE EXTERNAL STATIC IP**
+2. **Name:** `shizu-static-ip`
+3. **Network service tier:** Premium
+4. **IP version:** IPv4
+5. **Type:** Regional
+6. **Region:** **us-central1** (same as your VM)
+7. **Attached to:** select your VM `server-1`
+8. Click **Reserve**
+
+Note the IP (e.g. `34.173.172.237`) — this IP **never changes** on stop/start.
+
+**Or attach to existing VM:**  
+VM instances → `server-1` → **Edit** → **Network interfaces** → External IPv4 → **Static** → select `shizu-static-ip` → **Save**.
+
+---
+
+### 7.2 DNS at your registrar (GoDaddy / etc.)
+
+For **shizu.space**:
+
+| Type | Name | Value | TTL |
+|------|------|-------|-----|
+| **A** | `@` | Your **static** IP | 600 (or default) |
+| **A** | `www` | Same static IP | 600 |
+
+Remove old A records pointing to a different IP.
+
+Wait 5–30 minutes. Test:
 
 ```bash
-sudo dnf install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d shizu.co.in -d www.shizu.co.in
+ping shizu.space
+# or
+nslookup shizu.space
 ```
 
-Follow prompts. Certbot auto-renews and redirects HTTP → HTTPS.
+---
+
+### 7.3 HTTPS on VM (free SSL)
+
+SSH into server, then:
+
+```bash
+# Rocky Linux 10: certbot is in EPEL, not base repos
+sudo dnf install -y epel-release
+sudo dnf install -y certbot python3-certbot-nginx
+
+sudo certbot --nginx -d shizu.space -d www.shizu.space
+```
+
+- Enter email when asked
+- Agree to terms
+- Choose redirect HTTP → HTTPS (recommended)
+
+Test: **https://shizu.space/**
+
+Auto-renewal is enabled. Check:
+
+```bash
+sudo certbot renew --dry-run
+```
+
+---
+
+### 7.4 Stop / Start VM (no extra work)
+
+After static IP is attached:
+
+| Action | What happens |
+|--------|----------------|
+| **Stop** instance | VM shuts down, **IP stays** reserved |
+| **Start** instance | Same IP, Shizu starts automatically (systemd) |
+| **Reboot** | Same IP, services restart |
+
+You do **not** need to change DNS or run certbot again.
+
+Verify after start:
+
+```bash
+sudo systemctl status nginx market-monitor
+curl -s http://127.0.0.1/api/health
+```
+
+---
+
+### 7.5 If domain still shows old IP
+
+1. Confirm static IP on VM details page in GCP
+2. Confirm DNS A record matches that IP
+3. Clear browser cache or try incognito
+4. DNS can take up to 48h (usually minutes)
 
 ---
 
@@ -335,4 +420,4 @@ curl http://127.0.0.1/api/health
 
 ---
 
-*Last updated: June 2026 — Rocky Linux 10.2, Shizu 1.0.0, GCP e2-micro us-central1.*
+*Last updated: June 2026 — Rocky Linux 10.2, Shizu 1.0.0, GCP e2-micro us-central1, domain shizu.space.*

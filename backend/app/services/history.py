@@ -5,34 +5,38 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.models import SignalHistory
+from app.services.market import bar_end_from_ts, trade_window_end
 from app.services.market_data import fetch_history
-from app.services.signals import SHORT_TERM_HOLD_DAYS, TradeSignal, trade_plan_to_dict
+from app.services.signals import TradeSignal
 
 logger = logging.getLogger(__name__)
 
 
-def _plan_from_signal(signal: TradeSignal) -> dict | None:
-    if not signal.trade_plan:
-        return None
-    return trade_plan_to_dict(signal.trade_plan)
-
-
-def save_buy_signal(db: Session, signal: TradeSignal) -> SignalHistory | None:
+def save_buy_signal(db: Session, signal: TradeSignal, market: str = "US") -> SignalHistory | None:
     if not signal.can_earn or not signal.trade_plan:
         return None
 
     symbol = signal.symbol.upper()
+    market = market.upper()
     existing = (
         db.query(SignalHistory)
-        .filter(SignalHistory.symbol == symbol, SignalHistory.status == "open")
+        .filter(
+            SignalHistory.symbol == symbol,
+            SignalHistory.market == market,
+            SignalHistory.status == "open",
+        )
         .first()
     )
     if existing:
         return None
 
     plan = signal.trade_plan
+    created_at = datetime.utcnow()
+    expires_at = trade_window_end(created_at, plan.hold_days)
+
     record = SignalHistory(
         symbol=symbol,
+        market=market,
         action=signal.action.value,
         entry_price=plan.entry_price,
         sell_target=plan.sell_target,
@@ -45,13 +49,21 @@ def save_buy_signal(db: Session, signal: TradeSignal) -> SignalHistory | None:
         status="open",
         highest_since=plan.entry_price,
         lowest_since=plan.entry_price,
-        hold_days=SHORT_TERM_HOLD_DAYS,
-        expires_at=datetime.fromisoformat(plan.expires_at),
+        hold_days=plan.hold_days,
+        created_at=created_at,
+        expires_at=expires_at,
     )
     db.add(record)
     db.commit()
     db.refresh(record)
-    logger.info("Saved buy signal for %s @ %s, target %s", symbol, plan.entry_price, plan.sell_target)
+    logger.info(
+        "Saved %s buy signal for %s @ %s, target %s, window until %s",
+        market,
+        symbol,
+        plan.entry_price,
+        plan.sell_target,
+        expires_at.isoformat(),
+    )
     return record
 
 
@@ -61,11 +73,94 @@ def _close_record(
     exit_price: float,
     result_pct: float,
     now: datetime,
+    *,
+    target_hit_at: datetime | None = None,
+    days_to_target: int | None = None,
 ) -> None:
     record.status = status
     record.exit_price = round(exit_price, 2)
     record.result_pct = round(result_pct, 2)
     record.closed_at = now
+    if target_hit_at is not None:
+        record.target_hit_at = target_hit_at
+    if days_to_target is not None:
+        record.days_to_target = days_to_target
+
+
+def _days_in_window(created: datetime, hit_at: datetime) -> int:
+    return max((hit_at.date() - created.date()).days, 0)
+
+
+def _evaluate_bars(record: SignalHistory, since: pd.DataFrame, now: datetime) -> bool:
+    """
+    Walk daily bars in time order.
+
+    Rules (daily data):
+    - Skip stop/target on the signal day (bar includes pre-signal prices).
+    - Success only if target is hit on a bar ending on or before expires_at.
+    - Target after the window does not count.
+    """
+    created = record.created_at
+    expires = record.expires_at
+    signal_day = created.date()
+    last_in_window_close: float | None = None
+
+    for ts, row in since.iterrows():
+        bar_end = bar_end_from_ts(ts)
+        bar_date = bar_end.date()
+
+        if bar_date < signal_day:
+            continue
+
+        close = float(row["Close"])
+        if bar_end <= expires:
+            last_in_window_close = close
+
+        # Outcome checks from the day after the signal (next session onward).
+        if bar_date <= signal_day:
+            continue
+
+        low = float(row["Low"])
+        high = float(row["High"])
+
+        if bar_end <= expires:
+            if low <= record.stop_loss:
+                result = (record.stop_loss - record.entry_price) / record.entry_price * 100
+                _close_record(record, "stop_hit", record.stop_loss, result, now)
+                return True
+
+            if high >= record.sell_target:
+                result = (record.sell_target - record.entry_price) / record.entry_price * 100
+                _close_record(
+                    record,
+                    "target_hit",
+                    record.sell_target,
+                    result,
+                    now,
+                    target_hit_at=bar_end,
+                    days_to_target=_days_in_window(created, bar_end),
+                )
+                return True
+            continue
+
+        exit_price = last_in_window_close if last_in_window_close is not None else close
+        result = (exit_price - record.entry_price) / record.entry_price * 100
+        status = "expired_win" if result > 0 else "expired_loss"
+        _close_record(record, status, exit_price, result, now)
+        return True
+
+    if now >= expires:
+        exit_price = last_in_window_close
+        if exit_price is None and not since.empty:
+            exit_price = float(since["Close"].iloc[-1])
+        if exit_price is None:
+            exit_price = record.entry_price
+        result = (exit_price - record.entry_price) / record.entry_price * 100
+        status = "expired_win" if result > 0 else "expired_loss"
+        _close_record(record, status, exit_price, result, now)
+        return True
+
+    return False
 
 
 def update_open_signals(db: Session) -> int:
@@ -75,6 +170,7 @@ def update_open_signals(db: Session) -> int:
         return 0
 
     updated = 0
+    dirty = False
     now = datetime.utcnow()
 
     for record in open_records:
@@ -82,40 +178,42 @@ def update_open_signals(db: Session) -> int:
             df = fetch_history(record.symbol, period="3mo", interval="1d")
             entry_date = pd.Timestamp(record.created_at.date())
             mask = df.index >= entry_date
-            since = df.loc[mask] if mask.any() else df.tail(1)
+            since = df.loc[mask] if mask.any() else pd.DataFrame()
 
             if since.empty:
+                if now >= record.expires_at:
+                    _close_record(record, "expired_loss", record.entry_price, 0.0, now)
+                    updated += 1
                 continue
 
             high = float(since["High"].max())
             low = float(since["Low"].min())
             current = float(since["Close"].iloc[-1])
 
-            record.highest_since = round(max(record.highest_since or current, high), 2)
-            record.lowest_since = round(min(record.lowest_since or current, low), 2)
+            new_high = round(max(record.highest_since or current, high), 2)
+            new_low = round(min(record.lowest_since or current, low), 2)
+            if new_high != record.highest_since or new_low != record.lowest_since:
+                record.highest_since = new_high
+                record.lowest_since = new_low
+                dirty = True
 
-            target_hit = high >= record.sell_target
-            stop_hit = low <= record.stop_loss
-
-            if target_hit and not stop_hit:
-                result = (record.sell_target - record.entry_price) / record.entry_price * 100
-                _close_record(record, "target_hit", record.sell_target, result, now)
+            if _evaluate_bars(record, since, now):
                 updated += 1
-            elif stop_hit:
-                result = (record.stop_loss - record.entry_price) / record.entry_price * 100
-                _close_record(record, "stop_hit", record.stop_loss, result, now)
-                updated += 1
-            elif now >= record.expires_at:
-                result = (current - record.entry_price) / record.entry_price * 100
-                status = "expired_win" if result > 0 else "expired_loss"
-                _close_record(record, status, current, result, now)
-                updated += 1
+                dirty = True
         except Exception as e:
             logger.warning("Failed to update signal %s for %s: %s", record.id, record.symbol, e)
 
-    if updated:
+    if dirty:
         db.commit()
     return updated
+
+
+def _is_success(record: SignalHistory) -> bool:
+    return (
+        record.status == "target_hit"
+        and record.target_hit_at is not None
+        and record.target_hit_at <= record.expires_at
+    )
 
 
 def history_to_dict(record: SignalHistory, current_price: float | None = None) -> dict:
@@ -123,9 +221,13 @@ def history_to_dict(record: SignalHistory, current_price: float | None = None) -
     if record.status == "open" and current_price:
         progress_pct = round((current_price - record.entry_price) / record.entry_price * 100, 2)
 
+    now = datetime.utcnow()
+    window_open = record.status == "open" and now <= record.expires_at
+
     return {
         "id": record.id,
         "symbol": record.symbol,
+        "market": record.market,
         "action": record.action,
         "entry_price": record.entry_price,
         "sell_target": record.sell_target,
@@ -141,6 +243,10 @@ def history_to_dict(record: SignalHistory, current_price: float | None = None) -
         "highest_since": record.highest_since,
         "lowest_since": record.lowest_since,
         "hold_days": record.hold_days,
+        "target_hit_at": record.target_hit_at.isoformat() if record.target_hit_at else None,
+        "days_to_target": record.days_to_target,
+        "success": _is_success(record),
+        "window_open": window_open,
         "created_at": record.created_at.isoformat(),
         "expires_at": record.expires_at.isoformat(),
         "closed_at": record.closed_at.isoformat() if record.closed_at else None,
@@ -149,23 +255,33 @@ def history_to_dict(record: SignalHistory, current_price: float | None = None) -
     }
 
 
-def get_history_stats(db: Session) -> dict:
-    closed = db.query(SignalHistory).filter(SignalHistory.status != "open").all()
-    open_count = db.query(SignalHistory).filter(SignalHistory.status == "open").count()
+def get_history_stats(db: Session, market: str | None = None) -> dict:
+    query = db.query(SignalHistory)
+    if market:
+        query = query.filter(SignalHistory.market == market.upper())
 
-    wins = [r for r in closed if r.status == "target_hit" or (r.result_pct and r.result_pct > 0)]
-    losses = [r for r in closed if r.status in ("stop_hit", "expired_loss") or (r.result_pct and r.result_pct <= 0)]
+    all_records = query.all()
+    closed = [r for r in all_records if r.status != "open"]
+    open_count = sum(1 for r in all_records if r.status == "open")
+
+    target_hits = [r for r in closed if _is_success(r)]
+    stop_hits = [r for r in closed if r.status == "stop_hit"]
+    expired = [r for r in closed if r.status.startswith("expired")]
 
     total_closed = len(closed)
-    win_rate = round(len(wins) / total_closed * 100, 1) if total_closed else 0
+    win_rate = round(len(target_hits) / total_closed * 100, 1) if total_closed else 0
     avg_result = round(sum(r.result_pct or 0 for r in closed) / total_closed, 2) if total_closed else 0
 
     return {
+        "market": market.upper() if market else None,
         "total_signals": total_closed + open_count,
         "open": open_count,
         "closed": total_closed,
-        "wins": len(wins),
-        "losses": len(losses),
+        "wins": len(target_hits),
+        "losses": total_closed - len(target_hits),
+        "target_hits": len(target_hits),
+        "stop_hits": len(stop_hits),
+        "expired": len(expired),
         "win_rate": win_rate,
         "avg_result_pct": avg_result,
     }

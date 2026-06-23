@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, String, Text
+from sqlalchemy import DateTime, Float, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -8,9 +8,11 @@ from app.database import Base
 
 class WishlistItem(Base):
     __tablename__ = "wishlist"
+    __table_args__ = (UniqueConstraint("symbol", "market", name="uq_wishlist_symbol_market"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    symbol: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    symbol: Mapped[str] = mapped_column(String(20), index=True)
+    market: Mapped[str] = mapped_column(String(4), default="US", index=True)
     name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -22,6 +24,7 @@ class SignalHistory(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String(20), index=True)
+    market: Mapped[str] = mapped_column(String(4), default="US", index=True)
     action: Mapped[str] = mapped_column(String(20))
     entry_price: Mapped[float] = mapped_column(Float)
     sell_target: Mapped[float] = mapped_column(Float)
@@ -37,6 +40,8 @@ class SignalHistory(Base):
     highest_since: Mapped[float | None] = mapped_column(Float, nullable=True)
     lowest_since: Mapped[float | None] = mapped_column(Float, nullable=True)
     hold_days: Mapped[int] = mapped_column(default=10)
+    target_hit_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    days_to_target: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

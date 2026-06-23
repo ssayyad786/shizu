@@ -1,12 +1,14 @@
 """Multi-indicator signal engine for short-term swing trading."""
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 
 import numpy as np
 import pandas as pd
 import ta
+
+from app.services.market import trade_window_end
 
 SHORT_TERM_HOLD_DAYS = 10
 
@@ -196,7 +198,7 @@ def calculate_trade_plan(df: pd.DataFrame, entry_price: float, action: Action) -
     target_pct = round((sell_target - entry_price) / entry_price * 100, 2)
     stop_pct = round((entry_price - stop_loss) / entry_price * 100, 2)
 
-    expires = datetime.utcnow() + timedelta(days=SHORT_TERM_HOLD_DAYS)
+    expires = trade_window_end(datetime.utcnow(), SHORT_TERM_HOLD_DAYS)
     return TradePlan(
         entry_price=round(entry_price, 2),
         sell_target=sell_target,

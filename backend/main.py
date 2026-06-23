@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import get_data_dir, get_db_path, init_db
 from app.routes import history, stocks, wishlist
 from app.services.monitor import scan_wishlist
+from app.version import __version__
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
-app = FastAPI(title="Market Monitor", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Market Monitor", version=__version__, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,6 +51,7 @@ app.include_router(history.router)
 def health():
     return {
         "status": "ok",
+        "version": __version__,
         "data_dir": str(get_data_dir()),
         "database": str(get_db_path()),
     }

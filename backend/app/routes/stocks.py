@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
 
+from app.services.market import infer_market
 from app.services.market_data import df_to_candles, fetch_history, fetch_quote
 from app.services.monitor import get_cached_signals, scan_symbol, scan_wishlist
 from app.services.search import search_symbols
@@ -19,8 +20,8 @@ def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
 
 
 @router.get("/signals")
-def get_signals():
-    signals, last_scan = get_cached_signals()
+def get_signals(market: str | None = Query(None, pattern=r"^(US|IN)$")):
+    signals, last_scan = get_cached_signals(market=market)
     opportunities = [s for s in signals if s.get("can_earn")]
     return {
         "signals": signals,
@@ -81,8 +82,9 @@ def get_quote(symbol: str):
 
 
 @router.post("/stocks/{symbol}/scan")
-def scan_single(symbol: str):
+def scan_single(symbol: str, market: str | None = Query(None, pattern=r"^(US|IN)$")):
     try:
-        return scan_symbol(symbol)
+        m = market.upper() if market else infer_market(symbol)
+        return scan_symbol(symbol, market=m)
     except ValueError as e:
         raise HTTPException(404, str(e)) from e

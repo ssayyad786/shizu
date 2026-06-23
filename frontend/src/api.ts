@@ -1,3 +1,5 @@
+export type Market = "US" | "IN";
+
 export interface StockSearchResult {
   symbol: string;
   name: string;
@@ -8,6 +10,7 @@ export interface StockSearchResult {
 export interface WishlistItem {
   id: number;
   symbol: string;
+  market: Market;
   name: string | null;
   created_at: string;
 }
@@ -33,6 +36,7 @@ export interface TradePlan {
 
 export interface StockSignal {
   symbol: string;
+  market?: Market;
   action: string;
   confidence: number;
   price: number;
@@ -47,6 +51,7 @@ export interface StockSignal {
 export interface HistoryRecord {
   id: number;
   symbol: string;
+  market: Market;
   action: string;
   entry_price: number;
   sell_target: number;
@@ -62,6 +67,10 @@ export interface HistoryRecord {
   highest_since: number | null;
   lowest_since: number | null;
   hold_days: number;
+  target_hit_at: string | null;
+  days_to_target: number | null;
+  success: boolean;
+  window_open?: boolean;
   created_at: string;
   expires_at: string;
   closed_at: string | null;
@@ -70,11 +79,15 @@ export interface HistoryRecord {
 }
 
 export interface HistoryStats {
+  market: Market | null;
   total_signals: number;
   open: number;
   closed: number;
   wins: number;
   losses: number;
+  target_hits?: number;
+  stop_hits?: number;
+  expired?: number;
   win_rate: number;
   avg_result_pct: number;
 }
@@ -133,24 +146,33 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export function currencyForMarket(market: Market): string {
+  return market === "IN" ? "₹" : "$";
+}
+
 export const api = {
-  getWishlist: () => request<WishlistItem[]>("/wishlist"),
-  addToWishlist: (symbol: string, name?: string) =>
+  getWishlist: (market?: Market) =>
+    request<WishlistItem[]>(market ? `/wishlist?market=${market}` : "/wishlist"),
+  addToWishlist: (symbol: string, market: Market, name?: string) =>
     request<WishlistItem>("/wishlist", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ symbol, name }),
+      body: JSON.stringify({ symbol, market, name }),
     }),
-  removeFromWishlist: (symbol: string) =>
-    request<{ ok: boolean }>(`/wishlist/${symbol}`, { method: "DELETE" }),
-  getSignals: () =>
-    request<{ signals: StockSignal[]; opportunities: StockSignal[]; last_scan: string | null }>("/signals"),
+  removeFromWishlist: (symbol: string, market: Market) =>
+    request<{ ok: boolean }>(`/wishlist/${symbol}?market=${market}`, { method: "DELETE" }),
+  getSignals: (market?: Market) =>
+    request<{ signals: StockSignal[]; opportunities: StockSignal[]; last_scan: string | null }>(
+      market ? `/signals?market=${market}` : "/signals"
+    ),
   triggerScan: () =>
     request<{ scanned: number; opportunities: StockSignal[]; signals: StockSignal[] }>("/scan", { method: "POST" }),
   getStockDetail: (symbol: string, period = "6mo", interval = "1d") =>
     request<StockDetail>(`/stocks/${symbol}?period=${period}&interval=${interval}`),
   searchStocks: (q: string) =>
     request<{ query: string; results: StockSearchResult[] }>(`/search?q=${encodeURIComponent(q)}`),
-  getHistory: () =>
-    request<{ signals: HistoryRecord[]; stats: HistoryStats }>("/history"),
+  getHistory: (market?: Market) =>
+    request<{ signals: HistoryRecord[]; stats: HistoryStats }>(
+      market ? `/history?market=${market}` : "/history"
+    ),
 };

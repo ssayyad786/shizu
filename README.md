@@ -8,12 +8,12 @@
 
 | Item | Status |
 |------|--------|
-| **Version** | 1.0.0 |
+| **Version** | 1.1.0 |
 | **Purpose** | Short-term stock monitoring, buy signals, sell targets, outcome tracking |
 | **UI** | Light theme · React + Vite |
 | **Backend** | FastAPI · Python 3.11+ · SQLite |
 | **Market data** | Yahoo Finance (`yfinance`) — free, no API key |
-| **Auto-scan** | Every 5 minutes (wishlist) |
+| **Auto-scan** | Every 5 minutes (both US + Indian wishlists) |
 | **Hold period** | 10 trading days per saved signal |
 | **Production deploy** | GCP VM → `sudo bash scripts/setup-gcp-instance.sh` |
 | **Package name (RPM)** | `market-monitor` |
@@ -24,7 +24,8 @@
 | Tab | What it does |
 |-----|----------------|
 | **Dashboard** | Live signals, buy opportunities (with entry/target/stop), stock table, click stock → charts |
-| **History** | All saved BUY signals, win rate, target hit / stop hit / expired, progress on open trades |
+| **Wishlists** | Separate **US** and **Indian** lists (`.NS` / `.BO` for India) |
+| **Hold window** | 10 **calendar** days; target hit before window end = success |
 | **Help** | Indicator guide, trade plan explanation, signal meanings |
 
 ### Sidebar
@@ -37,7 +38,8 @@
 
 1. Score ≥ 0.20 → **BUY** or **STRONG BUY** shown on dashboard  
 2. Trade plan calculated (ATR-based): **buy price**, **sell target**, **stop loss**  
-3. Signal **saved to History** (one open signal per symbol at a time)  
+3. Signal **saved to History** with `expires_at = signal time + 10 days`  
+4. **Success** only if sell target is hit on a bar **before that expiry time** (day-by-day check)  
 4. Outcomes tracked: `target_hit` · `stop_hit` · `expired_win` · `expired_loss` · `open`
 
 ---
@@ -237,9 +239,10 @@ curl -s http://localhost/api/health | python3 -m json.tool
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/health` | Status + `data_dir` + `database` path |
-| GET | `/api/wishlist` | List wishlist |
-| POST | `/api/wishlist` | Add symbol `{ "symbol": "AAPL", "name": "..." }` |
-| DELETE | `/api/wishlist/{symbol}` | Remove from wishlist |
+| GET | `/api/wishlist?market=US\|IN` | List wishlist (optional market filter) |
+| POST | `/api/wishlist` | Add symbol `{ "symbol": "AAPL", "market": "US", "name": "..." }` |
+| DELETE | `/api/wishlist/{symbol}?market=US` | Remove from wishlist |
+| GET | `/api/history?market=US\|IN` | Trade history + stats per market |
 | GET | `/api/search?q=` | Stock name/symbol autocomplete |
 | GET | `/api/signals` | Cached signals + buy opportunities |
 | POST | `/api/scan` | Scan wishlist now |

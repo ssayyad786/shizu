@@ -1,11 +1,13 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import WishlistItem
+from app.services.market import MARKETS, validate_market_symbol
+from app.services.monitor import remove_cached_signal
 
 router = APIRouter(prefix="/api/wishlist", tags=["wishlist"])
 
@@ -13,11 +15,13 @@ router = APIRouter(prefix="/api/wishlist", tags=["wishlist"])
 class WishlistCreate(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=20)
     name: str | None = None
+    market: str = Field(default="US", pattern=r"^(US|IN)$")
 
 
 class WishlistItemOut(BaseModel):
     id: int
     symbol: str
+    market: str
     name: str | None
     created_at: datetime
 
@@ -25,18 +29,37 @@ class WishlistItemOut(BaseModel):
 
 
 @router.get("", response_model=list[WishlistItemOut])
-def list_wishlist(db: Session = Depends(get_db)):
-    return db.query(WishlistItem).order_by(WishlistItem.created_at.desc()).all()
+def list_wishlist(
+    market: str | None = Query(None, pattern=r"^(US|IN)$"),
+    db: Session = Depends(get_db),
+):
+    query = db.query(WishlistItem)
+    if market:
+        query = query.filter(WishlistItem.market == market.upper())
+    return query.order_by(WishlistItem.market, WishlistItem.created_at.desc()).all()
 
 
 @router.post("", response_model=WishlistItemOut, status_code=201)
 def add_to_wishlist(body: WishlistCreate, db: Session = Depends(get_db)):
     symbol = body.symbol.upper().strip()
-    existing = db.query(WishlistItem).filter(WishlistItem.symbol == symbol).first()
-    if existing:
-        raise HTTPException(409, f"{symbol} is already in your wishlist")
+    market = body.market.upper()
+    if market not in MARKETS:
+        raise HTTPException(400, f"market must be one of {', '.join(MARKETS)}")
 
-    item = WishlistItem(symbol=symbol, name=body.name)
+    try:
+        validate_market_symbol(market, symbol)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+    existing = (
+        db.query(WishlistItem)
+        .filter(WishlistItem.symbol == symbol, WishlistItem.market == market)
+        .first()
+    )
+    if existing:
+        raise HTTPException(409, f"{symbol} is already in your {market} wishlist")
+
+    item = WishlistItem(symbol=symbol, market=market, name=body.name)
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -44,10 +67,19 @@ def add_to_wishlist(body: WishlistCreate, db: Session = Depends(get_db)):
 
 
 @router.delete("/{symbol}")
-def remove_from_wishlist(symbol: str, db: Session = Depends(get_db)):
-    item = db.query(WishlistItem).filter(WishlistItem.symbol == symbol.upper()).first()
+def remove_from_wishlist(
+    symbol: str,
+    market: str = Query("US", pattern=r"^(US|IN)$"),
+    db: Session = Depends(get_db),
+):
+    item = (
+        db.query(WishlistItem)
+        .filter(WishlistItem.symbol == symbol.upper(), WishlistItem.market == market.upper())
+        .first()
+    )
     if not item:
-        raise HTTPException(404, f"{symbol} not in wishlist")
+        raise HTTPException(404, f"{symbol} not in {market} wishlist")
+    remove_cached_signal(item.symbol, item.market)
     db.delete(item)
     db.commit()
     return {"ok": True}

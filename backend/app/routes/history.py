@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -10,9 +10,15 @@ router = APIRouter(prefix="/api/history", tags=["history"])
 
 
 @router.get("")
-def list_history(db: Session = Depends(get_db)):
+def list_history(
+    market: str | None = Query(None, pattern=r"^(US|IN)$"),
+    db: Session = Depends(get_db),
+):
     update_open_signals(db)
-    records = db.query(SignalHistory).order_by(SignalHistory.created_at.desc()).all()
+    query = db.query(SignalHistory)
+    if market:
+        query = query.filter(SignalHistory.market == market.upper())
+    records = query.order_by(SignalHistory.created_at.desc()).all()
     result = []
     for r in records:
         current = None
@@ -22,10 +28,13 @@ def list_history(db: Session = Depends(get_db)):
             except Exception:
                 pass
         result.append(history_to_dict(r, current))
-    return {"signals": result, "stats": get_history_stats(db)}
+    return {"signals": result, "stats": get_history_stats(db, market=market)}
 
 
 @router.post("/refresh")
-def refresh_outcomes(db: Session = Depends(get_db)):
+def refresh_outcomes(
+    market: str | None = Query(None, pattern=r"^(US|IN)$"),
+    db: Session = Depends(get_db),
+):
     updated = update_open_signals(db)
-    return {"updated": updated, "stats": get_history_stats(db)}
+    return {"updated": updated, "stats": get_history_stats(db, market=market)}
