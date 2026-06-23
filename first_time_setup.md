@@ -259,7 +259,9 @@ After static IP is attached:
 | **Start** instance | Same IP, Shizu starts automatically (systemd) |
 | **Reboot** | Same IP, services restart |
 
-You do **not** need to change DNS or run certbot again.
+You do **not** need to change DNS or run certbot again on VM stop/start.
+
+> **After `git pull` + RPM upgrade:** If HTTPS stops working but HTTP still works, the nginx SSL config was reset. Re-run certbot (section 7.3) — certificates are still on disk.
 
 Verify after start:
 

@@ -111,7 +111,7 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %files
 %defattr(-,root,root,-)
 %config(noreplace) %{_sysconfdir}/market-monitor/config
-%{_sysconfdir}/nginx/conf.d/%{appname}.conf
+%config(noreplace) %{_sysconfdir}/nginx/conf.d/%{appname}.conf
 %{_unitdir}/%{appname}.service
 %{_libdir}/%{appname}/install-python-deps.sh
 %attr(750,market-monitor,market-monitor) %dir %{datadir}
