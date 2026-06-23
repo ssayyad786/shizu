@@ -10,3 +10,4 @@ When making code changes, always update README.md in the same change:
 - **Maintainer notes** section — already lists what to sync
 
 README is the single source of truth for application status.
+GCP / first-time deployment steps live in `first_time_setup.md` — update that file when install process changes.

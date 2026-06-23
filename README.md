@@ -112,6 +112,8 @@ sudo /opt/market-monitor/scripts/backup-data.sh
 
 ## Deploy on GCP
 
+**First time?** Follow **[first_time_setup.md](first_time_setup.md)** — full step-by-step (VM, clone, install, HTTPS, troubleshooting).
+
 ### Option A — Always Free (e2-micro, $0/month)
 
 GCP only gives a **free VM in US regions**, not Mumbai. Change these settings in the Create Instance screen:
@@ -166,6 +168,7 @@ Opens port 80, builds RPM, installs, starts nginx + API.
 
 | Script | Purpose |
 |--------|---------|
+| **[first_time_setup.md](first_time_setup.md)** | **Complete first-time guide (start here)** |
 | `scripts/setup-gcp-instance.sh` | Full install / upgrade on VM |
 | `scripts/gcp-startup-script.sh` | GCP VM startup automation (optional) |
 | `scripts/backup-data.sh` | Manual database backup |
@@ -288,7 +291,7 @@ shizu/
 - New UI tab or feature → **Application status** + **Project structure**
 - New indicator or scoring rule → **Algorithm**
 - New API route → **API reference**
-- New deploy path or data location → **Data persistence** + **Deploy**
+- New deploy or setup step → **first_time_setup.md** + **Deploy on GCP**
 - Version bump → **Application status** table + `packaging/rpm/market-monitor.spec`
 
 ---
