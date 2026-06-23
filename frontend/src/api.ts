@@ -137,8 +137,19 @@ export interface StockDetail {
 
 const BASE = "/api";
 
+function normalizeMarket(symbol: string, market?: Market): Market {
+  if (market === "US" || market === "IN") return market;
+  const s = symbol.toUpperCase();
+  if (s.endsWith(".NS") || s.endsWith(".BO")) return "IN";
+  return "US";
+}
+
+function normalizeWishlistItem(item: WishlistItem): WishlistItem {
+  return { ...item, market: normalizeMarket(item.symbol, item.market) };
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, options);
+  const res = await fetch(`${BASE}${path}`, { cache: "no-store", ...options });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     const detail = err.detail;
@@ -160,8 +171,12 @@ export function currencyForMarket(market: Market): string {
 }
 
 export const api = {
-  getWishlist: (market?: Market) =>
-    request<WishlistItem[]>(market ? `/wishlist?market=${market}` : "/wishlist"),
+  getWishlist: async (market?: Market) => {
+    const items = await request<WishlistItem[]>(
+      market ? `/wishlist?market=${market}` : "/wishlist"
+    );
+    return items.map(normalizeWishlistItem);
+  },
   addToWishlist: (symbol: string, market: Market, name?: string) =>
     request<WishlistItem>("/wishlist", {
       method: "POST",

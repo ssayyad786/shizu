@@ -2,8 +2,9 @@ import logging
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.database import get_data_dir, get_db_path, init_db
 from app.routes import history, stocks, wishlist
@@ -34,6 +35,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Market Monitor", version=__version__, lifespan=lifespan)
 
+
+class NoCacheApiMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+        return response
+
+
+app.add_middleware(NoCacheApiMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

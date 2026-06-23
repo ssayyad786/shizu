@@ -32,6 +32,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [detailError, setDetailError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(true);
+  const [wishlistError, setWishlistError] = useState("");
   const [scanning, setScanning] = useState(false);
 
   const wishlistForMarket = useMemo(
@@ -61,11 +63,14 @@ export default function App() {
   }, []);
 
   const loadWishlist = useCallback(async () => {
+    setWishlistError("");
     try {
       const items = await api.getWishlist();
       setWishlist(items);
-    } catch {
-      /* ignore */
+    } catch (e) {
+      setWishlistError(e instanceof Error ? e.message : "Failed to load wishlist");
+    } finally {
+      setWishlistLoading(false);
     }
   }, []);
 
@@ -142,7 +147,16 @@ export default function App() {
       }
       await loadDetail({ symbol, market }, period);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add");
+      const message = e instanceof Error ? e.message : "Failed to add";
+      setError(message);
+      if (message.includes("already in your")) {
+        const items = await api.getWishlist().catch(() => []);
+        setWishlist(items);
+        const existing = items.find((w) => w.symbol === symbol && w.market === market);
+        if (existing) {
+          await loadDetail({ symbol: existing.symbol, market: existing.market }, period);
+        }
+      }
       throw e;
     }
   };
@@ -208,8 +222,14 @@ export default function App() {
           <StockSearchInput market={activeMarket} onAdd={handleAdd} error={error} />
         </div>
 
+        {wishlistError && <div className="error" style={{ margin: "0 16px 8px" }}>{wishlistError}</div>}
+
         <div className="wishlist">
-          {wishlistForMarket.length === 0 ? (
+          {wishlistLoading ? (
+            <div style={{ padding: 16, color: "var(--muted)", fontSize: "0.85rem", textAlign: "center" }}>
+              Loading wishlist…
+            </div>
+          ) : wishlistForMarket.length === 0 ? (
             <div style={{ padding: 16, color: "var(--muted)", fontSize: "0.85rem", textAlign: "center" }}>
               No {activeMarket === "US" ? "US" : "Indian"} stocks yet.
             </div>
