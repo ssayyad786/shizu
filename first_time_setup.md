@@ -261,7 +261,7 @@ After static IP is attached:
 
 You do **not** need to change DNS or run certbot again on VM stop/start.
 
-> **After `git pull` + RPM upgrade:** If HTTPS stops working but HTTP still works, the nginx SSL config was reset. Re-run certbot (section 7.3) — certificates are still on disk.
+> **After RPM upgrade:** `scripts/upgrade.sh` automatically reinstalls HTTPS if needed. For manual fix, re-run certbot (section 7.3).
 
 Verify after start:
 
@@ -297,8 +297,8 @@ sudo systemctl restart market-monitor nginx
 # Backup database
 sudo /opt/market-monitor/scripts/backup-data.sh
 
-# Upgrade after git pull
-cd ~/shizu && git pull && sudo bash scripts/setup-gcp-instance.sh
+# Upgrade (recommended — one command)
+cd ~/shizu && sudo bash scripts/upgrade.sh
 ```
 
 ---

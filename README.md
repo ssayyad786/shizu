@@ -8,7 +8,7 @@
 
 | Item | Status |
 |------|--------|
-| **Version** | 1.1.0 |
+| **Version** | 1.1.1 |
 | **Purpose** | Short-term stock monitoring, buy signals, sell targets, outcome tracking |
 | **UI** | Light theme · React + Vite |
 | **Backend** | FastAPI · Python 3.11+ · SQLite |
@@ -171,7 +171,8 @@ Opens port 80, builds RPM, installs, starts nginx + API.
 | Script | Purpose |
 |--------|---------|
 | **[first_time_setup.md](first_time_setup.md)** | **Complete first-time guide (start here)** |
-| `scripts/setup-gcp-instance.sh` | Full install / upgrade on VM |
+| `scripts/setup-gcp-instance.sh` | First-time install on VM |
+| `scripts/upgrade.sh` | **Recommended** — pull, build, install, restore HTTPS |
 | `scripts/gcp-startup-script.sh` | GCP VM startup automation (optional) |
 | `scripts/backup-data.sh` | Manual database backup |
 | `packaging/rpm/build-rpm.sh` | Build RPM only |
