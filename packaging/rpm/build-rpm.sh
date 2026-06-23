@@ -2,20 +2,36 @@
 # Build market-monitor RPM on a RHEL-family Linux VM (Rocky, Alma, RHEL, CentOS Stream).
 #
 # Usage:
-#   cd /path/to/market
+#   cd /path/to/shizu
 #   ./packaging/rpm/build-rpm.sh
 #
 # Output:
-#   ~/rpmbuild/RPMS/x86_64/market-monitor-1.0.0-1.*.rpm
+#   ~/rpmbuild/RPMS/x86_64/market-monitor-<version>-1.*.rpm
 
 set -euo pipefail
 
 NAME="market-monitor"
-VERSION="1.0.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+VERSION_FILE="$PROJECT_ROOT/backend/app/version.py"
+SPEC_FILE="$SCRIPT_DIR/market-monitor.spec"
+
+VERSION=$(awk -F'"' '/^__version__/ {print $2; exit}' "$VERSION_FILE")
+SPEC_VERSION=$(awk '/^Version:/ {print $2; exit}' "$SPEC_FILE")
+
+if [[ -z "$VERSION" ]]; then
+  echo "ERROR: Could not read version from $VERSION_FILE" >&2
+  exit 1
+fi
+
+if [[ "$VERSION" != "$SPEC_VERSION" ]]; then
+  echo "ERROR: version.py ($VERSION) does not match market-monitor.spec ($SPEC_VERSION)" >&2
+  echo "Update both files to the same version before building." >&2
+  exit 1
+fi
 
 echo "==> Project root: $PROJECT_ROOT"
+echo "==> Version: $VERSION"
 
 # Install build dependencies (Rocky/Alma/RHEL)
 if command -v dnf &>/dev/null; then
@@ -41,8 +57,7 @@ tar -czf "$TARBALL" \
   -C "$PROJECT_ROOT/.." \
   "$(basename "$PROJECT_ROOT")"
 
-# Rename tarball root to match spec expectation (market-monitor-1.0.0/)
-# The spec uses %autosetup -n market-monitor-1.0.0 but our folder may be named 'market'
+# Rename tarball root to match spec expectation (market-monitor-<version>/)
 TMPDIR=$(mktemp -d)
 tar -xzf "$TARBALL" -C "$TMPDIR"
 INNER=$(ls "$TMPDIR")
@@ -50,7 +65,7 @@ mv "$TMPDIR/$INNER" "$TMPDIR/${NAME}-${VERSION}"
 tar -czf "$TARBALL" -C "$TMPDIR" "${NAME}-${VERSION}"
 rm -rf "$TMPDIR"
 
-cp "$SCRIPT_DIR/market-monitor.spec" ~/rpmbuild/SPECS/
+cp "$SPEC_FILE" ~/rpmbuild/SPECS/
 
 echo "==> Building RPM..."
 rpmbuild -ba ~/rpmbuild/SPECS/market-monitor.spec
