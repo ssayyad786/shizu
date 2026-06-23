@@ -1,6 +1,7 @@
 %global appname market-monitor
 %global appdir /opt/%{appname}
 %global datadir /var/lib/market-monitor
+%global debug_package %{nil}
 
 Name:           %{appname}
 Version:        1.0.0
@@ -121,5 +122,5 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.0.0-1
+* Tue Jun 24 2026 Shizu <admin@localhost> - 1.0.0-1
 - Initial RPM release; persistent data in /var/lib/market-monitor
