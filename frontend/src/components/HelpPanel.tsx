@@ -58,36 +58,68 @@ const INDICATORS = [
 ];
 
 const SIGNALS = [
-  { action: "STRONG BUY", desc: "Score ≥ 0.45 — target = entry + 2× ATR if reachable within 10 trading days." },
-  { action: "BUY", desc: "Score ≥ 0.20 — saved to History only if target is reachable within 10 trading days." },
-  { action: "HOLD", desc: "Score between −0.20 and +0.20 — no trade saved." },
-  { action: "SELL", desc: "Score ≤ −0.20 — bearish lean." },
+  {
+    action: "STRONG BUY",
+    desc: "Score ≥ 0.45. Sell target = entry + 2× ATR. Trade plan issued only if target is reachable within 10 trading days; saved to History.",
+  },
+  {
+    action: "BUY",
+    desc: "Score ≥ 0.20. Sell target = entry + 1.5× ATR. Same achievability rule — no target or History entry if it would take more than 10 trading days.",
+  },
+  {
+    action: "HOLD",
+    desc: "Score between −0.20 and +0.20, or bullish score but target not achievable in 10 trading days. No trade saved.",
+  },
+  { action: "SELL", desc: "Score ≤ −0.20 — bearish lean. Outlook shows expected downside/support range." },
   { action: "STRONG SELL", desc: "Score ≤ −0.45 — strongly bearish." },
 ];
 
 export default function HelpPanel() {
   return (
     <div className="help-panel">
+      <section className="help-section">
+        <h2>About Shizu</h2>
+        <div className="help-card">
+          <p className="help-what">
+            <strong>Shizu</strong> (Shizu Market Monitor) watches your US and Indian stock wishlists,
+            scores each symbol with seven technical indicators, and highlights short-term buy opportunities
+            when the math supports a clear edge. The app scans automatically every <strong>5 minutes</strong>;
+            the dashboard refreshes every <strong>30 seconds</strong>.
+          </p>
+          <p className="help-chart">
+            <strong>Dashboard</strong> — live signals, buy cards, stock table, and charts when you click a symbol.
+            <br />
+            <strong>History</strong> — saved buy signals with entry, target, stop, and win/loss outcomes.
+            <br />
+            <strong>Help</strong> — this guide.
+          </p>
+        </div>
+      </section>
+
       <section className="help-section help-disclaimer">
         <h2>Important disclaimer</h2>
         <div className="help-card help-card-disclaimer">
           <p className="help-what">
-            Shizu is a <strong>learning and research tool</strong>. It is not a brokerage, not a trading
-            platform, and does not provide financial, investment, or tax advice. All signals are generated
-            automatically from public market data and may be wrong or outdated.{" "}
-            <strong>Always do your own research</strong> and consult a qualified professional before
-            investing.
+            Shizu is a <strong>learning and research tool</strong>. It is not a brokerage, does not place
+            orders, and does not provide financial, investment, or tax advice. Signals come from public
+            market data (Yahoo Finance) and may be wrong or delayed.{" "}
+            <strong>Always do your own research</strong> before investing.
           </p>
         </div>
       </section>
 
       <section className="help-section">
-        <h2>How we analyze stocks</h2>
+        <h2>How Shizu analyzes stocks</h2>
         <p>
-          Market Monitor uses a <strong>multi-indicator scoring system</strong> tuned for
-          <strong> short-term ideas (up to 10 trading days)</strong>. Seven indicators are combined into a
-          weighted score. When a BUY signal fires, we estimate entry, sell target, and stop loss using
-          ATR (average daily price range).
+          Shizu uses a <strong>multi-indicator scoring system</strong> tuned for
+          <strong> short-term swing ideas (up to 10 trading days)</strong>. Seven indicators are weighted
+          and combined into a single score. When a buy is valid, we set entry, sell target, and stop loss
+          from <strong>ATR</strong> (average true range — typical daily price movement).
+        </p>
+        <p style={{ marginTop: 12 }}>
+          On each stock&apos;s detail view, the <strong>market signal</strong> box explains{" "}
+          <em>why</em> we say BUY, HOLD, or SELL, plus an expected upper/lower price range from
+          Bollinger Bands and ATR.
         </p>
       </section>
 
@@ -95,33 +127,34 @@ export default function HelpPanel() {
         <h2>US vs Indian markets</h2>
         <div className="help-card">
           <p className="help-what">
-            Use the <strong>US</strong> or <strong>India</strong> tab in the sidebar to maintain separate wishlists.
+            Use the <strong>US</strong> or <strong>India</strong> tabs in the sidebar to maintain separate wishlists.
             Indian stocks use NSE/BSE symbols with a <strong>.NS</strong> or <strong>.BO</strong> suffix
             (e.g. <code>RELIANCE.NS</code>, <code>TCS.NS</code>). US stocks use plain tickers
-            (e.g. <code>AAPL</code>, <code>MSFT</code>).
+            (e.g. <code>AAPL</code>, <code>MSFT</code>). You can paste comma-separated lists to bulk-import.
           </p>
           <p className="help-chart">
-            The <strong>History</strong> tab also splits by market. Success stats only count trades where
-            the sell target was hit inside the hold window.
+            <strong>History</strong> is split by market. Success counts only when the sell target is hit
+            inside the estimated trading-day window for that signal.
           </p>
         </div>
       </section>
 
       <section className="help-section">
-        <h2>Trade plan (sell target & stop loss)</h2>
+        <h2>Trade plan &amp; trading-day window</h2>
         <div className="help-card">
           <p className="help-what">
-            <strong>Buy at:</strong> current price when the signal fires.<br />
+            <strong>Buy at:</strong> last close when the signal fires.<br />
             <strong>Sell target:</strong> entry + 1.5× ATR (BUY) or 2× ATR (STRONG BUY).<br />
-            <strong>Stop loss:</strong> entry − 1× ATR (limits loss if wrong).<br />
-            <strong>Hold period:</strong> estimated trading days to reach target (1–10, weekdays only) —
-            based on recent price pace and ATR. No target is issued if it would take more than 10 trading days.
-            Outcome checks start from the <strong>next trading day</strong> (daily data).
+            <strong>Stop loss:</strong> entry − 1× ATR.<br />
+            <strong>Hold period:</strong> Shizu estimates how many <strong>trading days</strong> (Mon–Fri,
+            not calendar days) price needs to reach the target — based on recent up-day pace and ATR.
+            The window is <strong>1–10 trading days</strong> and shown on each buy card (e.g. &quot;~4 trading days&quot;).
           </p>
           <p className="help-chart">
-            All buy signals are saved in the <strong>History</strong> tab per market. A trade is
-            <strong> successful</strong> only if the sell target is hit before the window ends.
-            Stop loss, or expiry without target, is not counted as success.
+            <strong>Target only if achievable:</strong> if the ATR target would need more than 10 trading
+            days, Shizu shows <strong>HOLD</strong> instead — no sell target, no stop, nothing saved to History.
+            Outcome checks in History start from the <strong>next trading day</strong> after the signal (daily bars).
+            A trade is <strong>successful</strong> only if the sell target is hit before the window ends.
           </p>
         </div>
       </section>
@@ -175,10 +208,11 @@ export default function HelpPanel() {
       </section>
 
       <section className="help-section help-disclaimer">
-        <h2>Important</h2>
+        <h2>Remember</h2>
         <p>
-          This tool is for monitoring and education only — <strong>not financial advice</strong>.
-          Past signal accuracy does not guarantee future results. Always do your own research before trading.
+          Shizu is for monitoring and education — <strong>not financial advice</strong>. Past signal
+          accuracy in History does not guarantee future results. Exchange holidays are not modeled in the
+          trading-day window (weekdays only).
         </p>
       </section>
     </div>
