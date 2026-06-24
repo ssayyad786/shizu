@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, BulkAddResult, Market, StockDetail, StockSelection, StockSignal, WishlistItem } from "./api";
 import HelpPanel from "./components/HelpPanel";
+import AppFooter from "./components/AppFooter";
 import BrandMark from "./components/BrandMark";
 import HistoryPanel from "./components/HistoryPanel";
 import MarketTabs from "./components/MarketTabs";
