@@ -131,17 +131,14 @@ def bulk_add_to_wishlist(body: WishlistBulkCreate, db: Session = Depends(get_db)
             continue
 
         item = WishlistItem(symbol=symbol, market=market)
-        db.add(item)
-        added.append(item)
-
-    if added:
         try:
+            db.add(item)
             db.commit()
-            for item in added:
-                db.refresh(item)
+            db.refresh(item)
+            added.append(item)
         except IntegrityError:
             db.rollback()
-            raise HTTPException(409, "Some symbols were added by another request; try again") from None
+            skipped.append(symbol)
 
     return BulkAddResult(
         added=[WishlistItemOut.model_validate(i) for i in added],

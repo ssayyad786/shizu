@@ -173,22 +173,23 @@ export default function App() {
   const handleBulkComplete = async (result: BulkAddResult) => {
     setError("");
     await loadWishlist();
-    if (result.added.length === 0) return;
 
-    try {
-      await api.triggerScan();
-      await refreshSignals();
-    } catch (scanErr) {
-      setError(
-        scanErr instanceof Error
-          ? `Imported ${result.added.length}, but scan failed: ${scanErr.message}`
-          : `Imported ${result.added.length}, but scan failed`
-      );
+    if (result.added.length > 0) {
+      try {
+        await api.triggerScan();
+        await refreshSignals();
+      } catch (scanErr) {
+        setError(
+          scanErr instanceof Error
+            ? `Imported ${result.added.length}, but scan failed: ${scanErr.message}`
+            : `Imported ${result.added.length}, but scan failed`
+        );
+      }
+
+      const first = result.added[0];
+      await loadDetail({ symbol: first.symbol, market: first.market }, period);
+      setActiveTab("dashboard");
     }
-
-    const first = result.added[0];
-    await loadDetail({ symbol: first.symbol, market: first.market }, period);
-    setActiveTab("dashboard");
   };
 
   const handleRemove = async (symbol: string, market: Market, e: React.MouseEvent) => {

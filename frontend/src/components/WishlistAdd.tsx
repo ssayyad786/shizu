@@ -22,6 +22,20 @@ function filterResults(results: StockSearchResult[], market: Market): StockSearc
   );
 }
 
+function formatBulkSummary(res: BulkAddResult): string {
+  const parts: string[] = [];
+  if (res.added.length > 0) {
+    parts.push(`Added ${res.added.length} symbol${res.added.length === 1 ? "" : "s"}`);
+  }
+  if (res.skipped.length > 0) {
+    parts.push(`skipped ${res.skipped.length} already in list`);
+  }
+  if (res.invalid.length > 0) {
+    parts.push(`${res.invalid.length} invalid`);
+  }
+  return parts.join(" · ");
+}
+
 interface Props {
   market: Market;
   onAdd: (symbol: string, market: Market, name?: string) => Promise<void>;
@@ -37,6 +51,7 @@ export default function WishlistAdd({ market, onAdd, onBulkComplete, error }: Pr
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [summary, setSummary] = useState("");
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const symbols = parseSymbolList(text);
@@ -50,6 +65,7 @@ export default function WishlistAdd({ market, onAdd, onBulkComplete, error }: Pr
 
   useEffect(() => {
     setLocalError("");
+    setSummary("");
     if (isBulk || text.trim().length < 2) {
       setSuggestions([]);
       setOpen(false);
@@ -112,16 +128,15 @@ export default function WishlistAdd({ market, onAdd, onBulkComplete, error }: Pr
 
     setLoading(true);
     setLocalError("");
+    setSummary("");
     setOpen(false);
 
     try {
       if (symbols.length > 1) {
         const res = await api.bulkAddToWishlist(symbols, market);
         setText("");
+        setSummary(formatBulkSummary(res));
         await onBulkComplete(res);
-        if (res.added.length === 0 && res.skipped.length > 0) {
-          setLocalError(`All ${res.skipped.length} symbols were already in your wishlist`);
-        }
       } else if (symbols.length === 1) {
         const symbol = symbols[0];
         setText("");
@@ -164,7 +179,11 @@ export default function WishlistAdd({ market, onAdd, onBulkComplete, error }: Pr
           className="wishlist-add-input"
           placeholder={placeholder}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setSummary("");
+            setLocalError("");
+          }}
           onFocus={() => !isBulk && suggestions.length > 0 && setOpen(true)}
           onKeyDown={handleKeyDown}
           rows={3}
@@ -205,10 +224,11 @@ export default function WishlistAdd({ market, onAdd, onBulkComplete, error }: Pr
       )}
 
       {displayError && <div className="error">{displayError}</div>}
+      {summary && <div className="bulk-upload-result">{summary}</div>}
 
       <p className="search-hint">
         {symbols.length > 1
-          ? `${symbols.length} symbols ready — click Import to add all at once`
+          ? `${symbols.length} symbols ready — duplicates are skipped automatically`
           : market === "IN"
             ? "Indian stocks use .NS suffix. Paste comma-separated lists to add many at once."
             : "Paste comma-separated symbols to add many at once (e.g. AAPL, MSFT, TSLA)."}
