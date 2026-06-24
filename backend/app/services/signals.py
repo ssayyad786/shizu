@@ -10,7 +10,8 @@ import ta
 
 from app.services.market import trade_window_end
 
-SHORT_TERM_HOLD_DAYS = 10
+SHORT_TERM_MAX_TRADING_DAYS = 10
+SHORT_TERM_MIN_TRADING_DAYS = 1
 
 
 class Action(str, Enum):
@@ -199,8 +200,71 @@ WEIGHTS = {
 }
 
 
-def calculate_trade_plan(df: pd.DataFrame, entry_price: float, action: Action) -> TradePlan:
-    """ATR-based short-term targets: sell target and stop loss."""
+def estimate_trading_days_to_target(
+    df: pd.DataFrame,
+    entry_price: float,
+    sell_target: float,
+    atr: float,
+    score: float,
+) -> float:
+    """
+    Estimate trading sessions needed to reach sell_target from entry.
+    Returns a float (may exceed max); caller decides achievability.
+    """
+    distance = sell_target - entry_price
+    if distance <= 0:
+        return 0.0
+
+    closes = df["Close"].astype(float)
+    daily_change = closes.diff().tail(20).dropna()
+    up_days = daily_change[daily_change > 0]
+
+    if len(up_days) >= 3:
+        avg_up_move = float(up_days.mean())
+    else:
+        avg_up_move = float(daily_change.abs().mean()) if len(daily_change) else 0.0
+
+    if avg_up_move <= 0:
+        avg_up_move = atr * 0.4
+
+    typical_session_progress = max(avg_up_move, atr * 0.45)
+    days_from_pace = distance / avg_up_move
+    days_from_atr = distance / typical_session_progress
+    raw_days = (days_from_pace + days_from_atr) / 2.0
+
+    if score > 0:
+        raw_days *= 1.0 - min(score, 0.5) * 0.35
+
+    return raw_days
+
+
+def target_achievable_within_window(
+    df: pd.DataFrame,
+    entry_price: float,
+    sell_target: float,
+    atr: float,
+    score: float,
+    max_days: int = SHORT_TERM_MAX_TRADING_DAYS,
+) -> tuple[bool, int]:
+    """True if target can be reached within max_days trading sessions."""
+    raw = estimate_trading_days_to_target(df, entry_price, sell_target, atr, score)
+    if raw > max_days:
+        return False, max_days
+    days = int(round(raw))
+    days = max(SHORT_TERM_MIN_TRADING_DAYS, min(max_days, days))
+    return True, days
+
+
+def calculate_trade_plan(
+    df: pd.DataFrame,
+    entry_price: float,
+    action: Action,
+    score: float = 0.0,
+) -> TradePlan | None:
+    """
+    ATR-based targets with dynamic hold window (1–10 trading days).
+    Returns None if the target is not achievable within 10 trading days.
+    """
     atr_ind = ta.volatility.AverageTrueRange(df["High"], df["Low"], df["Close"], window=14)
     atr_val = float(atr_ind.average_true_range().iloc[-1])
     if np.isnan(atr_val) or atr_val <= 0:
@@ -209,10 +273,17 @@ def calculate_trade_plan(df: pd.DataFrame, entry_price: float, action: Action) -
     reward_mult = 2.0 if action == Action.STRONG_BUY else 1.5
     sell_target = round(entry_price + reward_mult * atr_val, 2)
     stop_loss = round(entry_price - 1.0 * atr_val, 2)
+
+    achievable, hold_days = target_achievable_within_window(
+        df, entry_price, sell_target, atr_val, score
+    )
+    if not achievable:
+        return None
+
     target_pct = round((sell_target - entry_price) / entry_price * 100, 2)
     stop_pct = round((entry_price - stop_loss) / entry_price * 100, 2)
+    expires = trade_window_end(datetime.utcnow(), hold_days)
 
-    expires = trade_window_end(datetime.utcnow(), SHORT_TERM_HOLD_DAYS)
     return TradePlan(
         entry_price=round(entry_price, 2),
         sell_target=sell_target,
@@ -220,7 +291,7 @@ def calculate_trade_plan(df: pd.DataFrame, entry_price: float, action: Action) -
         target_pct=target_pct,
         stop_pct=stop_pct,
         atr=round(atr_val, 2),
-        hold_days=SHORT_TERM_HOLD_DAYS,
+        hold_days=hold_days,
         expires_at=expires.isoformat(),
     )
 
@@ -325,7 +396,8 @@ def build_signal_outlook(
         lower = plan.stop_loss
         mid = plan.entry_price
         range_note = (
-            f"Buy/sell/stop from ATR ({plan.hold_days}-day trade window). "
+            f"Buy/sell/stop from ATR. Expected ~{plan.hold_days} trading day"
+            f"{'' if plan.hold_days == 1 else 's'} to reach target (max 10). "
             f"Upper = profit target, lower = stop loss."
         )
     elif action in (Action.STRONG_SELL, Action.SELL):
@@ -386,31 +458,43 @@ def analyze(symbol: str, df: pd.DataFrame) -> TradeSignal:
     price = float(df["Close"].iloc[-1])
 
     if score >= 0.45:
-        action = Action.STRONG_BUY
+        raw_action = Action.STRONG_BUY
     elif score >= 0.20:
-        action = Action.BUY
+        raw_action = Action.BUY
     elif score <= -0.45:
-        action = Action.STRONG_SELL
+        raw_action = Action.STRONG_SELL
     elif score <= -0.20:
-        action = Action.SELL
+        raw_action = Action.SELL
     else:
-        action = Action.HOLD
+        raw_action = Action.HOLD
 
     confidence = min(abs(score) / 0.6 * 100, 100)
-    can_earn = action in (Action.STRONG_BUY, Action.BUY)
-
     bullish = [i for i in indicators if i.score > 0]
     bearish = [i for i in indicators if i.score < 0]
 
     plan = None
-    if can_earn:
-        plan = calculate_trade_plan(df, price, action)
-        reasons = ", ".join(i.name for i in bullish[:3])
-        summary = (
-            f"BUY signal — {len(bullish)} bullish indicators ({reasons}). "
-            f"Target +{plan.target_pct}% at {plan.sell_target}, stop −{plan.stop_pct}% at {plan.stop_loss}."
-        )
-    elif action in (Action.SELL, Action.STRONG_SELL):
+    can_earn = False
+    action = raw_action
+
+    if raw_action in (Action.STRONG_BUY, Action.BUY):
+        plan = calculate_trade_plan(df, price, raw_action, score=round(score, 3))
+        if plan:
+            can_earn = True
+            reasons = ", ".join(i.name for i in bullish[:3])
+            day_word = "day" if plan.hold_days == 1 else "days"
+            summary = (
+                f"BUY signal — {len(bullish)} bullish indicators ({reasons}). "
+                f"Target +{plan.target_pct}% at {plan.sell_target} in ~{plan.hold_days} trading {day_word}, "
+                f"stop −{plan.stop_pct}% at {plan.stop_loss}."
+            )
+        else:
+            action = Action.HOLD
+            reasons = ", ".join(i.name for i in bullish[:3])
+            summary = (
+                f"Bullish score ({reasons}) but profit target is not achievable "
+                f"within {SHORT_TERM_MAX_TRADING_DAYS} trading days — no trade issued."
+            )
+    elif raw_action in (Action.SELL, Action.STRONG_SELL):
         reasons = ", ".join(i.name for i in bearish[:3])
         summary = f"Caution — {len(bearish)} bearish signals ({reasons}). Consider reducing exposure."
     else:

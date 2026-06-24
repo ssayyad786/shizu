@@ -92,8 +92,9 @@ function MarketSignalPanel({
         <p className="signal-range-note">{outlook.range_note}</p>
         {canEarn && signal.trade_plan && (
           <p className="signal-range-note">
-            Entry {fmtMoney(signal.trade_plan.entry_price, currency)} · hold up to{" "}
-            {signal.trade_plan.hold_days} days · tracked in History tab
+            Entry {fmtMoney(signal.trade_plan.entry_price, currency)} · expect target in ~
+            {signal.trade_plan.hold_days} trading day{signal.trade_plan.hold_days === 1 ? "" : "s"} (max 10) ·
+            tracked in History
           </p>
         )}
       </div>

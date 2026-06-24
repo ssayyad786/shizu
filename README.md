@@ -14,7 +14,7 @@
 | **Backend** | FastAPI · Python 3.11+ · SQLite |
 | **Market data** | Yahoo Finance (`yfinance`) — free, no API key |
 | **Auto-scan** | Every 5 minutes (both US + Indian wishlists) |
-| **Hold period** | 10 trading days per saved signal |
+| **Hold period** | 1–10 trading days (estimated); no target if not achievable in 10 sessions |
 | **Production deploy** | GCP VM → `sudo bash scripts/setup-gcp-instance.sh` |
 | **Package name (RPM)** | `market-monitor` |
 | **Repo** | https://github.com/ssayyad786/shizu |
@@ -25,7 +25,7 @@
 |-----|----------------|
 | **Dashboard** | Live signals, buy opportunities (with entry/target/stop), stock table, click stock → charts |
 | **Wishlists** | Separate **US** and **Indian** lists (`.NS` / `.BO` for India) |
-| **Hold window** | 10 **calendar** days; target hit before window end = success |
+| **Hold window** | **1–10 trading days** (estimated per signal); target only if achievable in window |
 | **Help** | Indicator guide, trade plan explanation, signal meanings |
 
 ### Sidebar
@@ -38,7 +38,7 @@
 
 1. Score ≥ 0.20 → **BUY** or **STRONG BUY** shown on dashboard  
 2. Trade plan calculated (ATR-based): **buy price**, **sell target**, **stop loss**  
-3. Signal **saved to History** with `expires_at = signal time + 10 days`  
+3. Signal **saved to History** only if target is achievable within estimated trading days (max 10 weekdays)  
 4. **Success** only if sell target is hit on a bar **before that expiry time** (day-by-day check)  
 4. Outcomes tracked: `target_hit` · `stop_hit` · `expired_win` · `expired_loss` · `open`
 

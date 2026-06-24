@@ -58,8 +58,8 @@ const INDICATORS = [
 ];
 
 const SIGNALS = [
-  { action: "STRONG BUY", desc: "Score ≥ 0.45 — strong case. Target = entry + 2× ATR." },
-  { action: "BUY", desc: "Score ≥ 0.20 — saved to History. Target = entry + 1.5× ATR." },
+  { action: "STRONG BUY", desc: "Score ≥ 0.45 — target = entry + 2× ATR if reachable within 10 trading days." },
+  { action: "BUY", desc: "Score ≥ 0.20 — saved to History only if target is reachable within 10 trading days." },
   { action: "HOLD", desc: "Score between −0.20 and +0.20 — no trade saved." },
   { action: "SELL", desc: "Score ≤ −0.20 — bearish lean." },
   { action: "STRONG SELL", desc: "Score ≤ −0.45 — strongly bearish." },
@@ -85,7 +85,7 @@ export default function HelpPanel() {
         <h2>How we analyze stocks</h2>
         <p>
           Market Monitor uses a <strong>multi-indicator scoring system</strong> tuned for
-          <strong> short-term ideas (up to 10 calendar days)</strong>. Seven indicators are combined into a
+          <strong> short-term ideas (up to 10 trading days)</strong>. Seven indicators are combined into a
           weighted score. When a BUY signal fires, we estimate entry, sell target, and stop loss using
           ATR (average daily price range).
         </p>
@@ -114,7 +114,8 @@ export default function HelpPanel() {
             <strong>Buy at:</strong> current price when the signal fires.<br />
             <strong>Sell target:</strong> entry + 1.5× ATR (BUY) or 2× ATR (STRONG BUY).<br />
             <strong>Stop loss:</strong> entry − 1× ATR (limits loss if wrong).<br />
-            <strong>Hold period:</strong> {10} calendar days — window ends at end of that day.
+            <strong>Hold period:</strong> estimated trading days to reach target (1–10, weekdays only) —
+            based on recent price pace and ATR. No target is issued if it would take more than 10 trading days.
             Outcome checks start from the <strong>next trading day</strong> (daily data).
           </p>
           <p className="help-chart">

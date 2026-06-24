@@ -50,16 +50,14 @@ export default function HistoryPanel() {
     load(market);
   }, [market]);
 
-  const holdDays = records[0]?.hold_days ?? 10;
-
   return (
     <div className="history-panel">
       <section className="help-section">
         <h2>Short-term trade history</h2>
         <p>
-          Every <strong>BUY</strong> or <strong>STRONG BUY</strong> is saved per market with entry,
-          sell target, and stop loss. <strong>Success</strong> means the sell target was hit within{" "}
-          <strong>{holdDays} calendar days</strong> (shown as window end on each card). Checks start
+          Every <strong>BUY</strong> or <strong>STRONG BUY</strong> with an achievable target is saved per market.
+          <strong> Success</strong> means the sell target was hit within the signal&apos;s estimated window
+          (<strong>1–10 trading days</strong>, weekdays only; shown as window end on each card). Checks start
           from the <strong>next trading day</strong> after the signal.
         </p>
       </section>

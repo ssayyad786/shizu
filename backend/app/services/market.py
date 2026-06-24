@@ -36,11 +36,23 @@ def trade_window_end(created_at: datetime, hold_days: int) -> datetime:
     """
     End of the hold window for daily-bar outcome checks.
 
-    Uses calendar days: a signal on day D expires at end of day (D + hold_days).
-    Daily bars on that last day still count toward target/stop.
+    hold_days = estimated trading sessions (Mon–Fri) to reach target, max 10.
+    Daily bars on the expiry day still count toward target/stop.
     """
-    last_date = created_at.date() + timedelta(days=hold_days)
-    return datetime.combine(last_date, time(23, 59, 59))
+    return add_trading_days(created_at, hold_days)
+
+
+def add_trading_days(start: datetime, trading_days: int) -> datetime:
+    """Add N weekday sessions (Mon–Fri). Exchange holidays are not modeled."""
+    if trading_days < 1:
+        trading_days = 1
+    d = start.date()
+    added = 0
+    while added < trading_days:
+        d += timedelta(days=1)
+        if d.weekday() < 5:
+            added += 1
+    return datetime.combine(d, time(23, 59, 59))
 
 
 def bar_end_from_ts(ts) -> datetime:
