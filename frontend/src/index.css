@@ -1110,10 +1110,257 @@ input {
 }
 
 @media (max-width: 900px) {
-  .app {
-    grid-template-columns: 1fr;
+  .view-mode-desktop .app {
+    min-width: 900px;
   }
-  .sidebar {
-    max-height: 40vh;
-  }
+}
+
+/* Bulk wishlist upload */
+.bulk-upload {
+  margin-top: 12px;
+}
+
+.bulk-upload-toggle {
+  width: 100%;
+  text-align: left;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 6px 0;
+}
+
+.bulk-upload-form textarea {
+  width: 100%;
+  margin-top: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-family: var(--mono);
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 88px;
+}
+
+.bulk-upload-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.bulk-upload-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.bulk-upload-count {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.bulk-upload-result {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--green);
+}
+
+.bulk-upload-invalid {
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* View mode toggle */
+.view-mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.view-mode-btn {
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+
+.view-mode-btn.active {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--accent);
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sidebar-header {
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.wishlist-empty {
+  padding: 16px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.section-title {
+  font-size: 1rem;
+  margin-bottom: 16px;
+}
+
+.loading-hint {
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+.mobile-back-btn {
+  margin-bottom: 12px;
+}
+
+/* Mobile layout mode */
+.view-mode-mobile .mobile-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.view-mode-mobile .mobile-sidebar,
+.view-mode-mobile .mobile-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.view-mode-mobile .mobile-sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.view-mode-mobile .mobile-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.view-mode-mobile .mobile-bottom-nav {
+  display: flex;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  flex-shrink: 0;
+  box-shadow: 0 -2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.view-mode-mobile .mobile-nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+  border-radius: 8px;
+}
+
+.view-mode-mobile .mobile-nav-btn.active {
+  color: var(--accent);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.view-mode-mobile .mobile-nav-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.view-mode-mobile .header {
+  padding: 14px 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.view-mode-mobile .header h1 {
+  font-size: 1.05rem;
+}
+
+.view-mode-mobile .main-header > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.view-mode-mobile .content {
+  padding: 16px;
+}
+
+.view-mode-mobile .opportunities {
+  padding: 12px 16px;
+}
+
+.view-mode-mobile .wishlist-item .remove {
+  opacity: 1;
+  padding: 8px 12px;
+  font-size: 1.25rem;
+}
+
+.view-mode-mobile .signal-table {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.view-mode-mobile .chart-wrapper {
+  height: 260px;
+}
+
+.view-mode-mobile .chart-wrapper-sm {
+  height: 110px;
+}
+
+.view-mode-mobile .chart-wrapper-xs {
+  height: 80px;
+}
+
+.view-mode-mobile .trade-levels {
+  grid-template-columns: 1fr;
+}
+
+.view-mode-mobile .scan-info {
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.view-mode-mobile .app-footer {
+  padding: 12px 16px 14px;
+}
+
+.view-mode-mobile .app-footer-disclaimer {
+  font-size: 0.72rem;
+}
+
+/* Desktop mode keeps side-by-side layout on all screen sizes */
+.view-mode-desktop .app {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+}
+
+.view-mode-desktop .mobile-layout,
+.view-mode-desktop .mobile-bottom-nav {
+  display: none;
 }

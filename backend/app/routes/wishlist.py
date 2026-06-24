@@ -19,6 +19,11 @@ class WishlistCreate(BaseModel):
     market: str = Field(default="US", pattern=r"^(US|IN)$")
 
 
+class WishlistBulkCreate(BaseModel):
+    symbols: list[str] = Field(..., min_length=1, max_length=200)
+    market: str = Field(default="US", pattern=r"^(US|IN)$")
+
+
 class WishlistItemOut(BaseModel):
     id: int
     symbol: str
@@ -27,6 +32,17 @@ class WishlistItemOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class BulkInvalidSymbol(BaseModel):
+    symbol: str
+    reason: str
+
+
+class BulkAddResult(BaseModel):
+    added: list[WishlistItemOut]
+    skipped: list[str]
+    invalid: list[BulkInvalidSymbol]
 
 
 @router.get("", response_model=list[WishlistItemOut])
@@ -69,6 +85,69 @@ def add_to_wishlist(body: WishlistCreate, db: Session = Depends(get_db)):
         raise HTTPException(409, f"{symbol} is already in your {market} wishlist") from e
     db.refresh(item)
     return item
+
+
+def _parse_bulk_symbols(raw_symbols: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in raw_symbols:
+        for part in raw.replace(";", ",").replace("\n", ",").split(","):
+            symbol = part.strip().upper()
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            out.append(symbol)
+    return out
+
+
+@router.post("/bulk", response_model=BulkAddResult, status_code=201)
+def bulk_add_to_wishlist(body: WishlistBulkCreate, db: Session = Depends(get_db)):
+    market = body.market.upper()
+    if market not in MARKETS:
+        raise HTTPException(400, f"market must be one of {', '.join(MARKETS)}")
+
+    symbols = _parse_bulk_symbols(body.symbols)
+    if not symbols:
+        raise HTTPException(400, "No valid symbols provided")
+
+    added: list[WishlistItem] = []
+    skipped: list[str] = []
+    invalid: list[BulkInvalidSymbol] = []
+
+    for symbol in symbols:
+        try:
+            validate_market_symbol(market, symbol)
+        except ValueError as e:
+            invalid.append(BulkInvalidSymbol(symbol=symbol, reason=str(e)))
+            continue
+
+        existing = (
+            db.query(WishlistItem)
+            .filter(WishlistItem.symbol == symbol, WishlistItem.market == market)
+            .first()
+        )
+        if existing:
+            skipped.append(symbol)
+            continue
+
+        item = WishlistItem(symbol=symbol, market=market)
+        db.add(item)
+        added.append(item)
+
+    if added:
+        try:
+            db.commit()
+            for item in added:
+                db.refresh(item)
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(409, "Some symbols were added by another request; try again") from None
+
+    return BulkAddResult(
+        added=[WishlistItemOut.model_validate(i) for i in added],
+        skipped=skipped,
+        invalid=invalid,
+    )
 
 
 @router.delete("/{symbol}")

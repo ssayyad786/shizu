@@ -15,6 +15,17 @@ export interface WishlistItem {
   created_at: string;
 }
 
+export interface BulkInvalidSymbol {
+  symbol: string;
+  reason: string;
+}
+
+export interface BulkAddResult {
+  added: WishlistItem[];
+  skipped: string[];
+  invalid: BulkInvalidSymbol[];
+}
+
 export interface IndicatorSignal {
   name: string;
   value: number | null;
@@ -182,6 +193,12 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ symbol, market, name }),
+    }),
+  bulkAddToWishlist: (symbols: string[], market: Market) =>
+    request<BulkAddResult>("/wishlist/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbols, market }),
     }),
   removeFromWishlist: (symbol: string, market: Market) =>
     request<{ ok: boolean }>(`/wishlist/${symbol}?market=${market}`, { method: "DELETE" }),

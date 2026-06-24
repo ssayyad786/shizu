@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.1.4
+Version:        1.2.0
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,8 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Mon Jun 23 2026 Shizu <admin@localhost> - 1.2.0-1
+- Bulk wishlist import (comma-separated symbols) and mobile/desktop layout toggle
 * Mon Jun 23 2026 Shizu <admin@localhost> - 1.1.4-1
 - Fix wishlist not showing due to cached API responses missing market field
 * Mon Jun 23 2026 Shizu <admin@localhost> - 1.1.3-1
