@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, BulkAddResult, Market, StockDetail, StockSelection, StockSignal, WishlistItem } from "./api";
 import HelpPanel from "./components/HelpPanel";
-import AppFooter from "./components/AppFooter";
+import BrandMark from "./components/BrandMark";
 import HistoryPanel from "./components/HistoryPanel";
 import MarketTabs from "./components/MarketTabs";
 import MobileToolbar from "./components/MobileToolbar";
@@ -230,10 +230,7 @@ export default function App() {
   const sidebarContent = (
     <>
       <div className="header sidebar-header">
-        <div>
-          <h1>Market Monitor</h1>
-          <div className="subtitle">Wishlists</div>
-        </div>
+        <BrandMark tagline="Market Monitor" />
       </div>
 
       {!isMobileLayout && (

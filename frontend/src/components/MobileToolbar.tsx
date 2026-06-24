@@ -1,4 +1,5 @@
 import { Market, WishlistItem } from "../api";
+import BrandMark from "./BrandMark";
 import MarketTabs from "./MarketTabs";
 import ViewModeToggle, { ViewMode } from "./ViewModeToggle";
 
@@ -19,6 +20,7 @@ export default function MobileToolbar({
 }: Props) {
   return (
     <div className="mobile-toolbar">
+      <BrandMark tagline="Market Monitor" size="sm" />
       <MarketTabs
         activeMarket={activeMarket}
         wishlist={wishlist}

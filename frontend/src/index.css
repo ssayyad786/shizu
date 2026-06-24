@@ -1358,6 +1358,56 @@ input {
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
   gap: 10px;
+  padding: 18px 20px;
+}
+
+.brand-mark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-mark-sm .brand-logo {
+  width: 32px;
+  height: 32px;
+}
+
+.brand-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.22);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.brand-name {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 55%, #3b82f6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand-mark-sm .brand-name {
+  font-size: 1.1rem;
+}
+
+.brand-tagline {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.01em;
 }
 
 .wishlist-empty {
@@ -1410,6 +1460,14 @@ input {
 .view-mode-mobile .mobile-toolbar .market-tabs {
   flex: 1;
   min-width: 0;
+}
+
+.view-mode-mobile .mobile-toolbar .brand-tagline {
+  display: none;
+}
+
+.view-mode-mobile .mobile-toolbar .brand-mark {
+  flex-shrink: 0;
 }
 
 .view-mode-mobile .market-tabs-compact {
