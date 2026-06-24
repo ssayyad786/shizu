@@ -159,6 +159,35 @@ input {
   text-transform: uppercase;
 }
 
+.wishlist-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wishlist-add-input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-family: var(--mono);
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 72px;
+}
+
+.wishlist-add-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.wishlist-add-btn {
+  align-self: flex-end;
+}
+
 .add-form input:focus {
   outline: none;
   border-color: var(--accent);

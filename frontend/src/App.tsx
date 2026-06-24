@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, BulkAddResult, Market, StockDetail, StockSelection, StockSignal, WishlistItem } from "./api";
-import BulkWishlistUpload from "./components/BulkWishlistUpload";
 import HelpPanel from "./components/HelpPanel";
 import AppFooter from "./components/AppFooter";
 import HistoryPanel from "./components/HistoryPanel";
@@ -9,7 +8,7 @@ import MobileToolbar from "./components/MobileToolbar";
 import OpportunityPanel from "./components/OpportunityPanel";
 import SignalTable from "./components/SignalTable";
 import StockDetailView from "./components/StockDetail";
-import StockSearchInput from "./components/StockSearchInput";
+import WishlistAdd from "./components/WishlistAdd";
 import ViewModeToggle, { getDefaultViewMode, saveViewMode, ViewMode } from "./components/ViewModeToggle";
 
 type Tab = "dashboard" | "history" | "help";
@@ -248,8 +247,12 @@ export default function App() {
 
       <div className="sidebar-section">
         <h2>Add to {activeMarket === "US" ? "US" : "Indian"} wishlist</h2>
-        <StockSearchInput market={activeMarket} onAdd={handleAdd} error={error} />
-        <BulkWishlistUpload market={activeMarket} onComplete={handleBulkComplete} />
+        <WishlistAdd
+          market={activeMarket}
+          onAdd={handleAdd}
+          onBulkComplete={handleBulkComplete}
+          error={error}
+        />
       </div>
 
       {wishlistError && <div className="error sidebar-error">{wishlistError}</div>}
