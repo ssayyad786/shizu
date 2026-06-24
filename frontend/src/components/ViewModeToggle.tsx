@@ -16,26 +16,33 @@ export function saveViewMode(mode: ViewMode) {
 interface Props {
   mode: ViewMode;
   onChange: (mode: ViewMode) => void;
+  compact?: boolean;
 }
 
-export default function ViewModeToggle({ mode, onChange }: Props) {
+export default function ViewModeToggle({ mode, onChange, compact }: Props) {
   return (
-    <div className="view-mode-toggle" role="group" aria-label="Layout mode">
+    <div
+      className={`view-mode-toggle ${compact ? "view-mode-toggle-compact" : ""}`}
+      role="group"
+      aria-label="Layout mode"
+    >
       <button
         type="button"
         className={`view-mode-btn ${mode === "mobile" ? "active" : ""}`}
         onClick={() => onChange("mobile")}
         title="Mobile layout"
+        aria-label="Mobile layout"
       >
-        📱 Mobile
+        {compact ? "📱" : "📱 Mobile"}
       </button>
       <button
         type="button"
         className={`view-mode-btn ${mode === "desktop" ? "active" : ""}`}
         onClick={() => onChange("desktop")}
         title="Desktop layout"
+        aria-label="Desktop layout"
       >
-        🖥 Desktop
+        {compact ? "🖥" : "🖥 Desktop"}
       </button>
     </div>
   );
