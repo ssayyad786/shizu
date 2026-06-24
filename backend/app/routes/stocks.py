@@ -4,7 +4,7 @@ from app.services.market import infer_market
 from app.services.market_data import df_to_candles, fetch_history, fetch_quote
 from app.services.monitor import get_cached_signals, scan_symbol, scan_wishlist
 from app.services.search import search_symbols
-from app.services.signals import analyze, compute_chart_indicators, trade_plan_to_dict
+from app.services.signals import analyze, compute_chart_indicators, signal_outlook_to_dict, trade_plan_to_dict
 
 router = APIRouter(prefix="/api", tags=["stocks"])
 
@@ -59,6 +59,7 @@ def get_stock_detail(
                 "summary": signal.summary,
                 "can_earn": signal.can_earn,
                 "trade_plan": trade_plan_to_dict(signal.trade_plan) if signal.trade_plan else None,
+                "outlook": signal_outlook_to_dict(signal.outlook) if signal.outlook else None,
                 "indicators": [
                     {"name": i.name, "value": i.value, "signal": i.signal, "score": i.score, "detail": i.detail}
                     for i in signal.indicators

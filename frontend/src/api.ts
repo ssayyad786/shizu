@@ -45,6 +45,16 @@ export interface TradePlan {
   expires_at: string;
 }
 
+export interface SignalOutlook {
+  reasoning: string[];
+  upper_target: number;
+  lower_target: number;
+  upper_pct: number;
+  lower_pct: number;
+  mid_level: number | null;
+  range_note: string;
+}
+
 export interface StockSignal {
   symbol: string;
   market?: Market;
@@ -56,6 +66,7 @@ export interface StockSignal {
   can_earn: boolean;
   indicators: IndicatorSignal[];
   trade_plan?: TradePlan | null;
+  outlook?: SignalOutlook | null;
   scanned_at?: string;
 }
 
@@ -128,6 +139,7 @@ export interface StockDetail {
     summary: string;
     can_earn: boolean;
     trade_plan?: TradePlan | null;
+    outlook?: SignalOutlook | null;
     indicators: IndicatorSignal[];
   };
   candles: Candle[];

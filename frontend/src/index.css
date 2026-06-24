@@ -855,6 +855,117 @@ input {
   color: var(--muted);
 }
 
+.signal-banner-rich {
+  padding: 18px 20px;
+}
+
+.signal-banner-rich .signal-summary {
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+.signal-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.signal-banner.earn .signal-section {
+  border-top-color: rgba(22, 163, 74, 0.2);
+}
+
+.signal-banner.caution .signal-section {
+  border-top-color: rgba(220, 38, 38, 0.2);
+}
+
+.signal-section h4 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.signal-reasoning {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.signal-reasoning li {
+  margin-bottom: 6px;
+}
+
+.signal-reasoning li:last-child {
+  margin-bottom: 0;
+}
+
+.signal-targets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.signal-target {
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.signal-banner.earn .signal-target {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.signal-target-label {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.signal-target-price {
+  display: block;
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.signal-target-pct {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.target-upper .signal-target-pct {
+  color: var(--green);
+}
+
+.target-lower .signal-target-pct {
+  color: var(--red);
+}
+
+.signal-range-note {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 10px;
+  line-height: 1.45;
+}
+
+@media (max-width: 700px) {
+  .signal-targets {
+    grid-template-columns: 1fr;
+  }
+}
+
 .market-tabs {
   display: flex;
   gap: 8px;

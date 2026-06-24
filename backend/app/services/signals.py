@@ -43,6 +43,19 @@ class TradePlan:
 
 
 @dataclass
+class SignalOutlook:
+    """Why we gave this signal and expected price range from our indicators."""
+
+    reasoning: list[str]
+    upper_target: float
+    lower_target: float
+    upper_pct: float
+    lower_pct: float
+    mid_level: float | None
+    range_note: str
+
+
+@dataclass
 class TradeSignal:
     symbol: str
     action: Action
@@ -53,6 +66,7 @@ class TradeSignal:
     summary: str
     can_earn: bool
     trade_plan: TradePlan | None = None
+    outlook: SignalOutlook | None = None
 
 
 def _rsi_signal(df: pd.DataFrame) -> IndicatorSignal:
@@ -224,6 +238,136 @@ def trade_plan_to_dict(plan: TradePlan) -> dict:
     }
 
 
+def _latest_atr(df: pd.DataFrame, entry_price: float) -> float:
+    atr_ind = ta.volatility.AverageTrueRange(df["High"], df["Low"], df["Close"], window=14)
+    atr_val = float(atr_ind.average_true_range().iloc[-1])
+    if np.isnan(atr_val) or atr_val <= 0:
+        atr_val = entry_price * 0.02
+    return atr_val
+
+
+def _latest_bollinger(df: pd.DataFrame) -> tuple[float, float, float]:
+    bb = ta.volatility.BollingerBands(df["Close"], window=20, window_dev=2)
+    upper = float(bb.bollinger_hband().iloc[-1])
+    lower = float(bb.bollinger_lband().iloc[-1])
+    mid = float(bb.bollinger_mavg().iloc[-1])
+    return upper, lower, mid
+
+
+def _pct_from_price(base: float, target: float) -> float:
+    if base <= 0:
+        return 0.0
+    return round((target - base) / base * 100, 2)
+
+
+def build_reasoning(action: Action, indicators: list[IndicatorSignal], score: float) -> list[str]:
+    bullish = [i for i in indicators if i.score > 0]
+    bearish = [i for i in indicators if i.score < 0]
+    neutral = [i for i in indicators if i.score == 0]
+
+    lines: list[str] = []
+
+    if action in (Action.STRONG_BUY, Action.BUY):
+        lines.append(
+            f"Score {score:+.2f} — {len(bullish)} bullish indicators outweigh "
+            f"{len(bearish)} bearish (need ≥ +0.20 to buy)."
+        )
+        for ind in bullish:
+            lines.append(f"{ind.name} supports BUY: {ind.detail}")
+        for ind in bearish:
+            lines.append(f"{ind.name} is bearish: {ind.detail}")
+        for ind in neutral:
+            lines.append(f"{ind.name} is neutral: {ind.detail}")
+    elif action in (Action.STRONG_SELL, Action.SELL):
+        lines.append(
+            f"Score {score:+.2f} — {len(bearish)} bearish indicators dominate "
+            f"(≤ −0.20 suggests caution)."
+        )
+        for ind in bearish:
+            lines.append(f"{ind.name} warns SELL: {ind.detail}")
+        for ind in bullish:
+            lines.append(f"{ind.name} is still bullish: {ind.detail}")
+        for ind in neutral:
+            lines.append(f"{ind.name} is neutral: {ind.detail}")
+    else:
+        lines.append(
+            f"Score {score:+.2f} is in the hold zone (−0.20 to +0.20) — "
+            f"mixed signals, no clear edge yet."
+        )
+        lines.append(
+            f"Snapshot: {len(bullish)} bullish · {len(bearish)} bearish · {len(neutral)} neutral."
+        )
+        for ind in indicators:
+            if ind.score > 0:
+                lines.append(f"{ind.name} leans bullish: {ind.detail}")
+            elif ind.score < 0:
+                lines.append(f"{ind.name} leans bearish: {ind.detail}")
+            else:
+                lines.append(f"{ind.name} is neutral: {ind.detail}")
+
+    return lines
+
+
+def build_signal_outlook(
+    df: pd.DataFrame,
+    price: float,
+    action: Action,
+    indicators: list[IndicatorSignal],
+    score: float,
+    plan: TradePlan | None,
+) -> SignalOutlook:
+    bb_upper, bb_lower, bb_mid = _latest_bollinger(df)
+    atr_val = _latest_atr(df, price)
+    reasoning = build_reasoning(action, indicators, score)
+
+    if plan:
+        upper = plan.sell_target
+        lower = plan.stop_loss
+        mid = plan.entry_price
+        range_note = (
+            f"Buy/sell/stop from ATR ({plan.hold_days}-day trade window). "
+            f"Upper = profit target, lower = stop loss."
+        )
+    elif action in (Action.STRONG_SELL, Action.SELL):
+        upper = round(min(bb_upper, price + 0.75 * atr_val), 2)
+        lower = round(min(bb_lower, price - 1.5 * atr_val), 2)
+        mid = round(bb_mid, 2)
+        range_note = (
+            "Expected downside range from Bollinger lower band and ATR — "
+            "upper is near-term resistance if price bounces."
+        )
+    else:
+        upper = round(max(bb_upper, price + 1.5 * atr_val), 2)
+        lower = round(min(bb_lower, price - 1.0 * atr_val), 2)
+        mid = round(bb_mid, 2)
+        range_note = (
+            "Expected range from Bollinger Bands (20-day channel) and ATR — "
+            "upper = resistance zone, lower = support zone."
+        )
+
+    return SignalOutlook(
+        reasoning=reasoning,
+        upper_target=upper,
+        lower_target=lower,
+        upper_pct=_pct_from_price(price, upper),
+        lower_pct=_pct_from_price(price, lower),
+        mid_level=mid,
+        range_note=range_note,
+    )
+
+
+def signal_outlook_to_dict(outlook: SignalOutlook) -> dict:
+    return {
+        "reasoning": outlook.reasoning,
+        "upper_target": outlook.upper_target,
+        "lower_target": outlook.lower_target,
+        "upper_pct": outlook.upper_pct,
+        "lower_pct": outlook.lower_pct,
+        "mid_level": outlook.mid_level,
+        "range_note": outlook.range_note,
+    }
+
+
 def analyze(symbol: str, df: pd.DataFrame) -> TradeSignal:
     if len(df) < 30:
         raise ValueError(f"Not enough data for {symbol} (need at least 30 bars)")
@@ -272,6 +416,8 @@ def analyze(symbol: str, df: pd.DataFrame) -> TradeSignal:
     else:
         summary = "No clear opportunity — hold and wait for stronger signals."
 
+    outlook = build_signal_outlook(df, price, action, indicators, round(score, 3), plan)
+
     return TradeSignal(
         symbol=symbol,
         action=action,
@@ -282,6 +428,7 @@ def analyze(symbol: str, df: pd.DataFrame) -> TradeSignal:
         summary=summary,
         can_earn=can_earn,
         trade_plan=plan,
+        outlook=outlook,
     )
 
 

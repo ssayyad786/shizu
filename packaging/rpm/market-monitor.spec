@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.2.3
+Version:        1.2.4
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,8 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Tue Jun 24 2026 Shizu <admin@localhost> - 1.2.4-1
+- Market signal box shows why HOLD/BUY/SELL and upper/lower price targets
 * Mon Jun 23 2026 Shizu <admin@localhost> - 1.2.3-1
 - Bulk import skips existing symbols and adds the rest without failing
 * Mon Jun 23 2026 Shizu <admin@localhost> - 1.2.2-1
