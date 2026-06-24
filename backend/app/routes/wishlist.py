@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models import WishlistItem
 from app.services.market import MARKETS, validate_market_symbol
 from app.services.monitor import remove_cached_signal
+from app.services.search import resolve_symbol_name
 
 router = APIRouter(prefix="/api/wishlist", tags=["wishlist"])
 
@@ -53,7 +54,19 @@ def list_wishlist(
     query = db.query(WishlistItem)
     if market:
         query = query.filter(WishlistItem.market == market.upper())
-    return query.order_by(WishlistItem.market, WishlistItem.created_at.desc()).all()
+    items = query.order_by(WishlistItem.market, WishlistItem.created_at.desc()).all()
+
+    dirty = False
+    for item in items:
+        if not item.name:
+            name = resolve_symbol_name(item.symbol)
+            if name:
+                item.name = name
+                dirty = True
+    if dirty:
+        db.commit()
+
+    return items
 
 
 @router.post("", response_model=WishlistItemOut, status_code=201)
@@ -76,7 +89,8 @@ def add_to_wishlist(body: WishlistCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(409, f"{symbol} is already in your {market} wishlist")
 
-    item = WishlistItem(symbol=symbol, market=market, name=body.name)
+    name = body.name or resolve_symbol_name(symbol)
+    item = WishlistItem(symbol=symbol, market=market, name=name)
     db.add(item)
     try:
         db.commit()
@@ -130,7 +144,8 @@ def bulk_add_to_wishlist(body: WishlistBulkCreate, db: Session = Depends(get_db)
             skipped.append(symbol)
             continue
 
-        item = WishlistItem(symbol=symbol, market=market)
+        name = resolve_symbol_name(symbol)
+        item = WishlistItem(symbol=symbol, market=market, name=name)
         try:
             db.add(item)
             db.commit()

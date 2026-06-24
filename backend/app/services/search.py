@@ -37,3 +37,26 @@ def search_symbols(query: str, limit: int = 8) -> list[dict]:
         })
 
     return results[:limit]
+
+
+def resolve_symbol_name(symbol: str) -> str | None:
+    """Look up company name for a symbol (used when add/bulk omits name)."""
+    sym = symbol.upper().strip()
+    if not sym:
+        return None
+
+    try:
+        for result in search_symbols(sym, limit=8):
+            if result["symbol"].upper() == sym:
+                return result["name"]
+    except Exception:
+        pass
+
+    try:
+        import yfinance as yf
+
+        ticker = yf.Ticker(sym)
+        info = ticker.info or {}
+        return info.get("longName") or info.get("shortName")
+    except Exception:
+        return None
