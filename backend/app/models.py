@@ -60,3 +60,19 @@ class MarketTradeStats(Base):
     expired: Mapped[int] = mapped_column(default=0)
     sum_result_pct: Mapped[float] = mapped_column(Float, default=0.0)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class HoldingItem(Base):
+    """Stocks the user owns — used for sell/hold recommendations."""
+
+    __tablename__ = "holdings"
+    __table_args__ = (UniqueConstraint("symbol", "market", name="uq_holdings_symbol_market"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(20), index=True)
+    market: Mapped[str] = mapped_column(String(4), default="US", index=True)
+    name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    avg_cost: Mapped[float] = mapped_column(Float)
+    shares: Mapped[float | None] = mapped_column(Float, nullable=True)
+    purchase_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

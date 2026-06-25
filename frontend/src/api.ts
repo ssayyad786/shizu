@@ -15,6 +15,63 @@ export interface WishlistItem {
   created_at: string;
 }
 
+export interface HoldingItem {
+  id: number;
+  symbol: string;
+  market: Market;
+  name: string | null;
+  avg_cost: number;
+  shares: number | null;
+  purchase_date: string | null;
+  created_at: string;
+}
+
+export interface HoldingAdvice {
+  recommendation: "SELL" | "HOLD";
+  strength: "STRONG" | "MODERATE" | "NEUTRAL" | "BULLISH";
+  headline: string;
+  summary: string;
+  avg_cost: number;
+  current_price: number;
+  shares: number | null;
+  unrealized_pnl_pct: number | null;
+  unrealized_pnl: number | null;
+  upper_target: number | null;
+  lower_target: number | null;
+  upper_pct: number | null;
+  lower_pct: number | null;
+  mid_level: number | null;
+  range_note: string | null;
+  reasoning: string[];
+  confidence: number;
+  score: number;
+}
+
+export interface HoldingSignal {
+  symbol: string;
+  market: Market;
+  action: string;
+  confidence: number;
+  price: number;
+  score: number;
+  summary: string;
+  can_earn: boolean;
+  indicators: IndicatorSignal[];
+  trade_plan?: TradePlan | null;
+  outlook?: SignalOutlook | null;
+  holding: HoldingItem;
+  advice: HoldingAdvice;
+  scanned_at?: string;
+}
+
+export interface HoldingFormData {
+  symbol: string;
+  name?: string;
+  avg_cost: number;
+  shares?: number;
+  purchase_date?: string;
+}
+
 export interface BulkInvalidSymbol {
   symbol: string;
   reason: string;
@@ -181,6 +238,10 @@ function normalizeWishlistItem(item: WishlistItem): WishlistItem {
   return { ...item, market: normalizeMarket(item.symbol, item.market) };
 }
 
+function normalizeHoldingItem(item: HoldingItem): HoldingItem {
+  return { ...item, market: normalizeMarket(item.symbol, item.market) };
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { cache: "no-store", ...options });
   if (!res.ok) {
@@ -246,4 +307,43 @@ export const api = {
     const qs = params.toString();
     return request<HistoryPage>(`/history${qs ? `?${qs}` : ""}`);
   },
+  getHoldings: async (market?: Market) => {
+    const items = await request<HoldingItem[]>(
+      market ? `/holdings?market=${market}` : "/holdings"
+    );
+    return items.map(normalizeHoldingItem);
+  },
+  addHolding: (
+    symbol: string,
+    market: Market,
+    body: { avg_cost: number; shares?: number; purchase_date?: string; name?: string }
+  ) =>
+    request<HoldingSignal>("/holdings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, market, ...body }),
+    }),
+  updateHolding: (
+    symbol: string,
+    market: Market,
+    body: { avg_cost?: number; shares?: number; purchase_date?: string; name?: string }
+  ) =>
+    request<HoldingItem>(`/holdings/${symbol}?market=${market}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  removeHolding: (symbol: string, market: Market) =>
+    request<{ ok: boolean }>(`/holdings/${symbol}?market=${market}`, { method: "DELETE" }),
+  getHoldingsSignals: (market?: Market) =>
+    request<{
+      signals: HoldingSignal[];
+      sell_alerts: HoldingSignal[];
+      last_scan: string | null;
+    }>(market ? `/holdings/signals?market=${market}` : "/holdings/signals"),
+  triggerHoldingsScan: () =>
+    request<{ scanned: number; sell_alerts: HoldingSignal[]; signals: HoldingSignal[] }>(
+      "/holdings/scan",
+      { method: "POST" }
+    ),
 };

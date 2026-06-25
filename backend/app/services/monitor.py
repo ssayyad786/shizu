@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 
-from app.models import WishlistItem
+from app.models import HoldingItem, WishlistItem
 
 from app.services.history import save_buy_signal, update_open_signals
+
+from app.services.holdings_analysis import signal_to_holding_payload
 
 from app.services.market import infer_market
 
@@ -31,6 +33,10 @@ logger = logging.getLogger(__name__)
 _latest_signals: dict[str, dict] = {}
 
 _last_scan: datetime | None = None
+
+_holdings_signals: dict[str, dict] = {}
+
+_last_holdings_scan: datetime | None = None
 
 
 
@@ -52,7 +58,29 @@ def remove_cached_signal(symbol: str, market: str) -> None:
 
 
 
-def get_cached_signals(market: str | None = None) -> tuple[list[dict], datetime | None]:
+def remove_cached_holding(symbol: str, market: str) -> None:
+
+    _holdings_signals.pop(_cache_key(symbol, market), None)
+
+
+
+
+
+def get_cached_holdings_signals(market: str | None = None) -> tuple[list[dict], datetime | None]:
+
+    signals = sorted(
+        _holdings_signals.values(),
+        key=lambda s: (
+            0 if s.get("advice", {}).get("recommendation") == "SELL" else 1,
+            -abs(s.get("score", 0)),
+        ),
+    )
+
+    if market:
+
+        signals = [s for s in signals if s.get("market") == market.upper()]
+
+    return signals, _last_holdings_scan
 
     signals = sorted(_latest_signals.values(), key=lambda s: s["score"], reverse=True)
 
@@ -61,6 +89,34 @@ def get_cached_signals(market: str | None = None) -> tuple[list[dict], datetime 
         signals = [s for s in signals if s.get("market") == market.upper()]
 
     return signals, _last_scan
+
+
+
+
+
+def remove_cached_holding(symbol: str, market: str) -> None:
+
+    _holdings_signals.pop(_cache_key(symbol, market), None)
+
+
+
+
+
+def get_cached_holdings_signals(market: str | None = None) -> tuple[list[dict], datetime | None]:
+
+    signals = sorted(
+        _holdings_signals.values(),
+        key=lambda s: (
+            0 if s.get("advice", {}).get("recommendation") == "SELL" else 1,
+            -abs(s.get("score", 0)),
+        ),
+    )
+
+    if market:
+
+        signals = [s for s in signals if s.get("market") == market.upper()]
+
+    return signals, _last_holdings_scan
 
 
 
@@ -193,6 +249,172 @@ def scan_wishlist(db: Session | None = None) -> list[dict]:
                 results.append(failed)
 
         _last_scan = datetime.utcnow()
+
+        return results
+
+    finally:
+
+        if close_db:
+
+            db.close()
+
+
+
+
+
+def scan_holding(item: HoldingItem, db: Session | None = None) -> dict:
+
+    symbol = item.symbol.upper()
+
+    market = item.market.upper()
+
+    df = fetch_history(symbol)
+
+    signal: TradeSignal = analyze(symbol, df)
+
+    result = signal_to_holding_payload(signal, item)
+
+    _holdings_signals[_cache_key(symbol, market)] = result
+
+    return result
+
+
+
+
+
+def scan_holdings(db: Session | None = None) -> list[dict]:
+
+    global _last_holdings_scan
+
+    close_db = False
+
+    if db is None:
+
+        db = SessionLocal()
+
+        close_db = True
+
+
+
+    try:
+
+        items = db.query(HoldingItem).order_by(HoldingItem.market, HoldingItem.symbol).all()
+
+        valid_keys = {_cache_key(i.symbol, i.market) for i in items}
+
+        for key in list(_holdings_signals.keys()):
+
+            if key not in valid_keys:
+
+                del _holdings_signals[key]
+
+
+
+        results = []
+
+        for item in items:
+
+            try:
+
+                results.append(scan_holding(item, db=db))
+
+            except Exception as e:
+
+                logger.warning("Failed to scan holding %s (%s): %s", item.symbol, item.market, e)
+
+                failed = {
+
+                    "symbol": item.symbol,
+
+                    "market": item.market,
+
+                    "action": "HOLD",
+
+                    "confidence": 0,
+
+                    "price": 0,
+
+                    "score": 0,
+
+                    "summary": f"Scan failed: {e}",
+
+                    "can_earn": False,
+
+                    "indicators": [],
+
+                    "trade_plan": None,
+
+                    "outlook": None,
+
+                    "holding": {
+
+                        "id": item.id,
+
+                        "symbol": item.symbol,
+
+                        "market": item.market,
+
+                        "name": item.name,
+
+                        "avg_cost": item.avg_cost,
+
+                        "shares": item.shares,
+
+                        "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
+
+                        "created_at": item.created_at.isoformat() if item.created_at else None,
+
+                    },
+
+                    "advice": {
+
+                        "recommendation": "HOLD",
+
+                        "strength": "NEUTRAL",
+
+                        "headline": f"Could not analyze: {e}",
+
+                        "summary": f"Scan failed: {e}",
+
+                        "avg_cost": item.avg_cost,
+
+                        "current_price": 0,
+
+                        "shares": item.shares,
+
+                        "unrealized_pnl_pct": None,
+
+                        "unrealized_pnl": None,
+
+                        "upper_target": None,
+
+                        "lower_target": None,
+
+                        "upper_pct": None,
+
+                        "lower_pct": None,
+
+                        "mid_level": None,
+
+                        "range_note": None,
+
+                        "reasoning": [],
+
+                        "confidence": 0,
+
+                        "score": 0,
+
+                    },
+
+                    "scanned_at": datetime.utcnow().isoformat(),
+
+                }
+
+                _holdings_signals[_cache_key(item.symbol, item.market)] = failed
+
+                results.append(failed)
+
+        _last_holdings_scan = datetime.utcnow()
 
         return results
 

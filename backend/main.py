@@ -7,9 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.database import SessionLocal, get_data_dir, get_db_path, init_db
-from app.routes import history, stocks, wishlist
+from app.routes import history, holdings, stocks, wishlist
 from app.services.history import purge_old_history
-from app.services.monitor import scan_wishlist
+from app.services.monitor import scan_holdings, scan_wishlist
 from app.version import __version__
 
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 SCAN_INTERVAL_MINUTES = 5
 PURGE_INTERVAL_HOURS = 24
 scheduler = BackgroundScheduler()
+
+
+def _run_scheduled_scan() -> None:
+    try:
+        scan_wishlist()
+        scan_holdings()
+    except Exception as e:
+        logger.warning("Scheduled scan failed: %s", e)
 
 
 def _run_history_purge() -> None:
@@ -39,7 +47,7 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Data directory: %s", data_dir)
     logger.info("Database file: %s", db_path)
-    scheduler.add_job(scan_wishlist, "interval", minutes=SCAN_INTERVAL_MINUTES, id="wishlist_scan")
+    scheduler.add_job(_run_scheduled_scan, "interval", minutes=SCAN_INTERVAL_MINUTES, id="market_scan")
     scheduler.add_job(
         _run_history_purge,
         "interval",
@@ -48,7 +56,7 @@ async def lifespan(app: FastAPI):
     )
     scheduler.start()
     logger.info("Market monitor started — scanning every %d minutes", SCAN_INTERVAL_MINUTES)
-    scan_wishlist()
+    _run_scheduled_scan()
     _run_history_purge()
     yield
     scheduler.shutdown()
@@ -78,6 +86,7 @@ app.add_middleware(
 app.include_router(wishlist.router)
 app.include_router(stocks.router)
 app.include_router(history.router)
+app.include_router(holdings.router)
 
 
 @app.get("/api/health")

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, BulkAddResult, Market, StockDetail, StockSelection, StockSignal, WishlistItem } from "./api";
+import { api, BulkAddResult, HoldingItem, Market, StockDetail, StockSelection, StockSignal, WishlistItem } from "./api";
 import HelpPanel from "./components/HelpPanel";
 import AppFooter from "./components/AppFooter";
 import BrandMark from "./components/BrandMark";
 import HistoryPanel from "./components/HistoryPanel";
+import HoldingsPanel from "./components/HoldingsPanel";
 import MarketTabs from "./components/MarketTabs";
 import MobileToolbar from "./components/MobileToolbar";
 import OpportunityPanel from "./components/OpportunityPanel";
@@ -12,7 +13,7 @@ import StockDetailView from "./components/StockDetail";
 import WishlistAdd from "./components/WishlistAdd";
 import ViewModeToggle, { getDefaultViewMode, saveViewMode, ViewMode } from "./components/ViewModeToggle";
 
-type Tab = "dashboard" | "history" | "help";
+type Tab = "dashboard" | "holdings" | "history" | "help";
 type MobilePanel = "wishlist" | "main";
 
 function sameSelection(a: StockSelection | null, b: StockSelection | null) {
@@ -25,6 +26,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [activeMarket, setActiveMarket] = useState<Market>("US");
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
+  const [holdings, setHoldings] = useState<HoldingItem[]>([]);
   const [signals, setSignals] = useState<StockSignal[]>([]);
   const [opportunities, setOpportunities] = useState<StockSignal[]>([]);
   const [lastScan, setLastScan] = useState<string | null>(null);
@@ -83,6 +85,23 @@ export default function App() {
     }
   }, []);
 
+  const loadHoldings = useCallback(async () => {
+    try {
+      const items = await api.getHoldings();
+      setHoldings(items);
+    } catch {
+      /* backend may not be ready yet */
+    }
+  }, []);
+
+  const holdingsCounts = useMemo(
+    () => ({
+      US: holdings.filter((h) => h.market === "US").length,
+      IN: holdings.filter((h) => h.market === "IN").length,
+    }),
+    [holdings]
+  );
+
   const loadDetail = useCallback(async (pick: StockSelection, p = period) => {
     setLoading(true);
     setDetailError("");
@@ -103,10 +122,11 @@ export default function App() {
 
   useEffect(() => {
     loadWishlist();
+    loadHoldings();
     refreshSignals();
     const interval = setInterval(refreshSignals, 30000);
     return () => clearInterval(interval);
-  }, [loadWishlist, refreshSignals]);
+  }, [loadWishlist, loadHoldings, refreshSignals]);
 
   useEffect(() => {
     if (selected) {
@@ -303,6 +323,12 @@ export default function App() {
               Dashboard
             </button>
             <button
+              className={`main-tab ${activeTab === "holdings" ? "active" : ""}`}
+              onClick={() => openMobileTab("holdings")}
+            >
+              My Holdings
+            </button>
+            <button
               className={`main-tab ${activeTab === "history" ? "active" : ""}`}
               onClick={() => openMobileTab("history")}
             >
@@ -320,9 +346,11 @@ export default function App() {
               ? "Indicator guide"
               : activeTab === "history"
                 ? "Trade signal history"
-                : selected
-                  ? `${selected.symbol} — Chart & Analysis`
-                  : `${activeMarket === "US" ? "US" : "Indian"} dashboard`}
+                : activeTab === "holdings"
+                  ? "My holdings — sell / hold advice"
+                  : selected
+                    ? `${selected.symbol} — Chart & Analysis`
+                    : `${activeMarket === "US" ? "US" : "Indian"} dashboard`}
           </h1>
           {activeTab === "dashboard" && (
             <div className="subtitle scan-info">
@@ -358,6 +386,13 @@ export default function App() {
           <HelpPanel />
         ) : activeTab === "history" ? (
           <HistoryPanel />
+        ) : activeTab === "holdings" ? (
+          <HoldingsPanel
+            market={activeMarket}
+            onMarketChange={handleMarketChange}
+            holdingsCounts={holdingsCounts}
+            onHoldingsChange={loadHoldings}
+          />
         ) : (
           <>
             {isMobileLayout && selected && (
@@ -450,6 +485,14 @@ export default function App() {
             >
               <span className="mobile-nav-icon">📊</span>
               Dashboard
+            </button>
+            <button
+              type="button"
+              className={`mobile-nav-btn ${mobilePanel === "main" && activeTab === "holdings" ? "active" : ""}`}
+              onClick={() => openMobileTab("holdings")}
+            >
+              <span className="mobile-nav-icon">💼</span>
+              Holdings
             </button>
             <button
               type="button"

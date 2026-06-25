@@ -89,6 +89,8 @@ export default function HelpPanel() {
           <p className="help-chart">
             <strong>Dashboard</strong> — live signals, buy cards, stock table, and charts when you click a symbol.
             <br />
+            <strong>My Holdings</strong> — stocks you already own; sell/hold advice with price levels and P&amp;L vs your average cost.
+            <br />
             <strong>History</strong> — saved buy signals with entry, target, stop, and win/loss outcomes.
             <br />
             <strong>Help</strong> — this guide.
@@ -121,6 +123,24 @@ export default function HelpPanel() {
           <em>why</em> we say BUY, HOLD, or SELL, plus an expected upper/lower price range from
           Bollinger Bands and ATR.
         </p>
+      </section>
+
+      <section className="help-section">
+        <h2>My Holdings (sell / hold)</h2>
+        <div className="help-card">
+          <p className="help-what">
+            Use the <strong>My Holdings</strong> tab for positions you already hold. Search by company name
+            or ticker (same autocomplete as the wishlist). Enter your <strong>average purchase price</strong>
+            (required); optionally add <strong>shares</strong> and <strong>purchase date</strong> for P&amp;L.
+          </p>
+          <p className="help-chart">
+            Shizu runs the <strong>same seven-indicator model</strong> as the dashboard. For owners we map
+            the signal to <strong>SELL</strong> (bearish score) or <strong>HOLD</strong> (neutral or bullish).
+            Each card shows current price, your avg cost, unrealized P&amp;L, upside target, and support/stop
+            zone from Bollinger Bands and ATR. Holdings are scanned every <strong>5 minutes</strong> with the
+            wishlist. Nothing is saved to History — that tab is for new buy ideas only.
+          </p>
+        </div>
       </section>
 
       <section className="help-section">

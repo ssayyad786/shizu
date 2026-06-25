@@ -1651,3 +1651,213 @@ input {
 .view-mode-desktop .mobile-bottom-nav {
   display: none;
 }
+
+/* My Holdings tab */
+.holdings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.holdings-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.holdings-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.holdings-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 520px;
+}
+
+.holdings-field-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.holdings-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.holdings-fields-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.holdings-picked-name {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: -4px 0 0;
+}
+
+.holdings-add-btn {
+  align-self: flex-start;
+}
+
+.holdings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.holding-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+
+.holding-card.sell-strong {
+  border-color: var(--red);
+}
+
+.holding-card.sell {
+  border-color: #c45c5c;
+}
+
+.holding-card.bullish {
+  border-color: var(--green);
+}
+
+.holding-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.holding-symbol {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.holding-name {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.holding-rec-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.holding-card.sell-strong .holding-rec-badge,
+.holding-card.sell .holding-rec-badge {
+  color: var(--red);
+}
+
+.holding-card.bullish .holding-rec-badge {
+  color: var(--green);
+}
+
+.holding-headline {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 0 12px;
+  line-height: 1.4;
+}
+
+.holding-levels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  font-size: 0.8rem;
+  margin-bottom: 12px;
+}
+
+.holding-level-label {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.pnl-up { color: var(--green); }
+.pnl-down { color: var(--red); }
+
+.holding-pnl-amt {
+  font-weight: 400;
+  font-size: 0.75rem;
+}
+
+.holding-targets {
+  font-size: 0.78rem;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.holding-reasoning {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0 0 10px;
+  padding-left: 18px;
+  line-height: 1.45;
+}
+
+.holding-summary {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0 0 6px;
+  line-height: 1.4;
+}
+
+.holding-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.holding-actions,
+.holding-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.holding-remove {
+  color: var(--red);
+}
+
+.holdings-alerts-note {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: -8px 0 0;
+}
+
+@media (max-width: 600px) {
+  .holdings-fields-row {
+    grid-template-columns: 1fr;
+  }
+
+  .holding-levels {
+    grid-template-columns: 1fr;
+  }
+}

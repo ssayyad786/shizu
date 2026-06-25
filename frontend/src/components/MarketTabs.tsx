@@ -10,9 +10,12 @@ interface Props {
   wishlist: WishlistItem[];
   onChange: (market: Market) => void;
   compact?: boolean;
+  counts?: Partial<Record<Market, number>>;
 }
 
-export default function MarketTabs({ activeMarket, wishlist, onChange, compact }: Props) {
+export default function MarketTabs({ activeMarket, wishlist, onChange, compact, counts }: Props) {
+  const countFor = (m: Market) =>
+    counts?.[m] ?? wishlist.filter((w) => w.market === m).length;
   return (
     <div className={`market-tabs ${compact ? "market-tabs-compact" : ""}`} role="tablist" aria-label="Market">
       {MARKETS.map((m) => (
@@ -25,7 +28,7 @@ export default function MarketTabs({ activeMarket, wishlist, onChange, compact }
           onClick={() => onChange(m.id)}
         >
           {m.flag} {m.label}
-          <span className="market-count">{wishlist.filter((w) => w.market === m.id).length}</span>
+          <span className="market-count">{countFor(m.id)}</span>
         </button>
       ))}
     </div>
