@@ -46,3 +46,17 @@ class SignalHistory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class MarketTradeStats(Base):
+    """Cumulative stats for trades removed from history after retention period."""
+
+    __tablename__ = "market_trade_stats"
+
+    market: Mapped[str] = mapped_column(String(4), primary_key=True)
+    closed_count: Mapped[int] = mapped_column(default=0)
+    target_hits: Mapped[int] = mapped_column(default=0)
+    stop_hits: Mapped[int] = mapped_column(default=0)
+    expired: Mapped[int] = mapped_column(default=0)
+    sum_result_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

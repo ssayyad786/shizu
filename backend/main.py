@@ -6,8 +6,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.database import get_data_dir, get_db_path, init_db
+from app.database import SessionLocal, get_data_dir, get_db_path, init_db
 from app.routes import history, stocks, wishlist
+from app.services.history import purge_old_history
 from app.services.monitor import scan_wishlist
 from app.version import __version__
 
@@ -15,7 +16,20 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 SCAN_INTERVAL_MINUTES = 5
+PURGE_INTERVAL_HOURS = 24
 scheduler = BackgroundScheduler()
+
+
+def _run_history_purge() -> None:
+    db = SessionLocal()
+    try:
+        n = purge_old_history(db)
+        if n:
+            logger.info("Retention purge removed %d closed trade(s)", n)
+    except Exception as e:
+        logger.warning("History retention purge failed: %s", e)
+    finally:
+        db.close()
 
 
 @asynccontextmanager
@@ -26,9 +40,16 @@ async def lifespan(app: FastAPI):
     logger.info("Data directory: %s", data_dir)
     logger.info("Database file: %s", db_path)
     scheduler.add_job(scan_wishlist, "interval", minutes=SCAN_INTERVAL_MINUTES, id="wishlist_scan")
+    scheduler.add_job(
+        _run_history_purge,
+        "interval",
+        hours=PURGE_INTERVAL_HOURS,
+        id="history_purge",
+    )
     scheduler.start()
     logger.info("Market monitor started — scanning every %d minutes", SCAN_INTERVAL_MINUTES)
     scan_wishlist()
+    _run_history_purge()
     yield
     scheduler.shutdown()
 

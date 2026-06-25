@@ -1,10 +1,10 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from app.models import SignalHistory, WishlistItem
+from app.models import MarketTradeStats, SignalHistory, WishlistItem
 from app.services.market import bar_end_from_ts, trade_window_end
 from app.services.market_data import fetch_history, fetch_quote
 from app.services.search import resolve_symbol_name
@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 HISTORY_DEFAULT_LIMIT = 30
 HISTORY_MAX_LIMIT = 100
 NAME_BACKFILL_BATCH = 10
+TRADE_RETENTION_DAYS = 30
+
+_last_purge_at: datetime | None = None
 
 
 def _lookup_symbol_name(db: Session, symbol: str, market: str) -> str | None:
@@ -379,43 +382,173 @@ def history_to_dict(record: SignalHistory, current_price: float | None = None) -
     }
 
 
-def get_history_stats(db: Session, market: str | None = None) -> dict:
+def _get_or_create_rollup(db: Session, market: str) -> MarketTradeStats:
+    market = market.upper()
+    row = db.query(MarketTradeStats).filter(MarketTradeStats.market == market).first()
+    if row:
+        return row
+    row = MarketTradeStats(market=market)
+    db.add(row)
+    db.flush()
+    return row
+
+
+def _accumulate_record_into_rollup(rollup: MarketTradeStats, record: SignalHistory) -> None:
+    rollup.closed_count += 1
+    if _is_success(record):
+        rollup.target_hits += 1
+    elif record.status == "stop_hit":
+        rollup.stop_hits += 1
+    elif record.status.startswith("expired"):
+        rollup.expired += 1
+    rollup.sum_result_pct += float(record.result_pct or 0.0)
+
+
+def purge_old_history(db: Session, retention_days: int = TRADE_RETENTION_DAYS) -> int:
+    """
+    Delete closed trade cards older than retention_days.
+    Their stats are merged into market_trade_stats first so totals stay correct.
+    Open trades are never deleted.
+    """
+    global _last_purge_at
+    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    old_rows = (
+        db.query(SignalHistory)
+        .filter(
+            SignalHistory.status != "open",
+            SignalHistory.closed_at.isnot(None),
+            SignalHistory.closed_at < cutoff,
+        )
+        .all()
+    )
+    if not old_rows:
+        _last_purge_at = datetime.utcnow()
+        return 0
+
+    by_market: dict[str, list[SignalHistory]] = {}
+    for row in old_rows:
+        by_market.setdefault(row.market.upper(), []).append(row)
+
+    for market, rows in by_market.items():
+        rollup = _get_or_create_rollup(db, market)
+        for record in rows:
+            _accumulate_record_into_rollup(rollup, record)
+            db.delete(record)
+        rollup.updated_at = datetime.utcnow()
+
+    db.commit()
+    _last_purge_at = datetime.utcnow()
+    logger.info("Purged %d closed trade(s) older than %d days", len(old_rows), retention_days)
+    return len(old_rows)
+
+
+def maybe_purge_old_history(db: Session) -> int:
+    """Run retention purge at most once every 6 hours."""
+    global _last_purge_at
+    now = datetime.utcnow()
+    if _last_purge_at and (now - _last_purge_at).total_seconds() < 6 * 3600:
+        return 0
+    return purge_old_history(db)
+
+
+def _live_market_stats(db: Session, market: str) -> dict:
     from sqlalchemy import func
 
-    base = db.query(SignalHistory)
-    if market:
-        base = base.filter(SignalHistory.market == market.upper())
-
+    base = db.query(SignalHistory).filter(SignalHistory.market == market.upper())
     total = base.count()
     open_count = base.filter(SignalHistory.status == "open").count()
     closed_count = total - open_count
-    target_hits = base.filter(SignalHistory.status == "target_hit").count()
+    target_hits = base.filter(
+        SignalHistory.status == "target_hit",
+        SignalHistory.target_hit_at.isnot(None),
+        SignalHistory.target_hit_at <= SignalHistory.expires_at,
+    ).count()
     stop_hits = base.filter(SignalHistory.status == "stop_hit").count()
     expired = base.filter(SignalHistory.status.like("expired%")).count()
-
-    avg_result = (
-        db.query(func.avg(SignalHistory.result_pct))
-        .filter(SignalHistory.status != "open")
+    sum_result = (
+        db.query(func.sum(SignalHistory.result_pct))
+        .filter(SignalHistory.market == market.upper(), SignalHistory.status != "open")
+        .scalar()
     )
-    if market:
-        avg_result = avg_result.filter(SignalHistory.market == market.upper())
-    avg_val = avg_result.scalar()
-    avg_result_pct = round(float(avg_val), 2) if avg_val is not None else 0.0
-
-    win_rate = round(target_hits / closed_count * 100, 1) if closed_count else 0.0
-
     return {
-        "market": market.upper() if market else None,
-        "total_signals": total,
+        "total": total,
         "open": open_count,
         "closed": closed_count,
-        "wins": target_hits,
-        "losses": closed_count - target_hits,
         "target_hits": target_hits,
         "stop_hits": stop_hits,
         "expired": expired,
-        "win_rate": win_rate,
-        "avg_result_pct": avg_result_pct,
+        "sum_result_pct": float(sum_result or 0.0),
+    }
+
+
+def _archived_market_stats(db: Session, market: str) -> dict:
+    row = db.query(MarketTradeStats).filter(MarketTradeStats.market == market.upper()).first()
+    if not row:
+        return {
+            "closed": 0,
+            "target_hits": 0,
+            "stop_hits": 0,
+            "expired": 0,
+            "sum_result_pct": 0.0,
+        }
+    return {
+        "closed": row.closed_count,
+        "target_hits": row.target_hits,
+        "stop_hits": row.stop_hits,
+        "expired": row.expired,
+        "sum_result_pct": row.sum_result_pct,
+    }
+
+
+def get_history_stats(db: Session, market: str | None = None) -> dict:
+    if not market:
+        us = get_history_stats(db, "US")
+        ind = get_history_stats(db, "IN")
+        closed = us["closed"] + ind["closed"]
+        target_hits = (us["target_hits"] or 0) + (ind["target_hits"] or 0)
+        sum_pct = 0.0
+        for s in (us, ind):
+            closed_s = s["closed"]
+            if closed_s:
+                sum_pct += s["avg_result_pct"] * closed_s
+        return {
+            "market": None,
+            "total_signals": us["total_signals"] + ind["total_signals"],
+            "open": us["open"] + ind["open"],
+            "closed": closed,
+            "wins": target_hits,
+            "losses": closed - target_hits,
+            "target_hits": target_hits,
+            "stop_hits": (us["stop_hits"] or 0) + (ind["stop_hits"] or 0),
+            "expired": (us["expired"] or 0) + (ind["expired"] or 0),
+            "win_rate": round(target_hits / closed * 100, 1) if closed else 0.0,
+            "avg_result_pct": round(sum_pct / closed, 2) if closed else 0.0,
+        }
+
+    market = market.upper()
+    live = _live_market_stats(db, market)
+    arch = _archived_market_stats(db, market)
+
+    closed = arch["closed"] + live["closed"]
+    target_hits = arch["target_hits"] + live["target_hits"]
+    stop_hits = arch["stop_hits"] + live["stop_hits"]
+    expired = arch["expired"] + live["expired"]
+    sum_result = arch["sum_result_pct"] + live["sum_result_pct"]
+    total_signals = arch["closed"] + live["total"]
+
+    return {
+        "market": market,
+        "total_signals": total_signals,
+        "open": live["open"],
+        "closed": closed,
+        "wins": target_hits,
+        "losses": closed - target_hits,
+        "target_hits": target_hits,
+        "stop_hits": stop_hits,
+        "expired": expired,
+        "win_rate": round(target_hits / closed * 100, 1) if closed else 0.0,
+        "avg_result_pct": round(sum_result / closed, 2) if closed else 0.0,
+        "archived_closed": arch["closed"],
     }
 
 

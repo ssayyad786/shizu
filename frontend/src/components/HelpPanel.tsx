@@ -154,7 +154,8 @@ export default function HelpPanel() {
             <strong>Target only if achievable:</strong> if the ATR target would need more than 10 trading
             days, Shizu shows <strong>HOLD</strong> instead — no sell target, no stop, nothing saved to History.
             Outcome checks use the <strong>latest price</strong> for open trades. History lists{" "}
-            <strong>30 signals per page</strong> (load more for older rows). Stats cover all saved signals.
+            <strong>30 signals per page</strong> (load more for older rows). Closed trade cards are kept for{" "}
+            <strong>30 days</strong> after they close; aggregate win/loss stats are kept permanently.
           </p>
         </div>
       </section>

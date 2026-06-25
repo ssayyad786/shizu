@@ -8,6 +8,7 @@ from app.services.history import (
     backfill_history_names,
     get_history_stats,
     list_history_page,
+    maybe_purge_old_history,
     records_to_dicts,
     update_open_signals,
 )
@@ -26,6 +27,8 @@ def list_history(
     if refresh:
         update_open_signals(db)
         backfill_history_names(db)
+
+    maybe_purge_old_history(db)
 
     records, total = list_history_page(db, market, limit, offset)
     signals = records_to_dicts(records)
