@@ -533,13 +533,32 @@ input {
   font-family: var(--mono);
   font-weight: 700;
   font-size: 1.1rem;
-  margin-right: 10px;
+}
+
+.history-symbol-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.history-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.history-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .history-status {
   font-size: 0.75rem;
   font-weight: 600;
-  margin-left: 10px;
 }
 
 .history-status.status-win { color: var(--green); }

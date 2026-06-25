@@ -48,6 +48,8 @@ export default function HistoryPanel() {
 
   useEffect(() => {
     load(market);
+    const interval = setInterval(() => load(market), 30000);
+    return () => clearInterval(interval);
   }, [market]);
 
   return (
@@ -120,10 +122,15 @@ export default function HistoryPanel() {
                   <article key={r.id} className={`history-card ${st.className}`}>
                     <div className="history-card-top">
                       <div>
-                        <span className="history-symbol">{r.symbol}</span>
+                        <div className="history-symbol-row">
+                          <span className="history-symbol">{r.symbol}</span>
+                          {r.name && <span className="history-name">{r.name}</span>}
+                        </div>
+                        <div className="history-badges">
                         <span className={`market-pill market-${r.market}`}>{r.market}</span>
                         <span className={`action-pill ${r.action}`}>{r.action.replace("_", " ")}</span>
                         <span className={`history-status ${st.className}`}>{st.text}</span>
+                        </div>
                       </div>
                       <time className="scan-info">{new Date(r.created_at).toLocaleString()}</time>
                     </div>

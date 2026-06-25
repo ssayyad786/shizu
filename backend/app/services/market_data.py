@@ -19,6 +19,12 @@ def fetch_quote(symbol: str) -> dict:
 
     prev_close = float(hist["Close"].iloc[-2]) if len(hist) > 1 else float(hist["Close"].iloc[-1])
     current = float(hist["Close"].iloc[-1])
+    try:
+        live = float(getattr(info, "last_price", 0) or 0)
+        if live > 0:
+            current = live
+    except (TypeError, ValueError):
+        pass
     change = current - prev_close
     change_pct = (change / prev_close * 100) if prev_close else 0
 

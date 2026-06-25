@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.2.6
+Version:        1.2.7
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,8 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Mon Jun 23 2025 Shizu <admin@localhost> - 1.2.7-1
+- Fix history target detection with live price; show company names on history cards
 * Tue Jun 24 2026 Shizu <admin@localhost> - 1.2.6-1
 - Dynamic trading-day window (1-10); issue target only if achievable within 10 sessions
 * Tue Jun 24 2026 Shizu <admin@localhost> - 1.2.5-1

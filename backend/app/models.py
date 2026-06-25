@@ -40,6 +40,7 @@ class SignalHistory(Base):
     highest_since: Mapped[float | None] = mapped_column(Float, nullable=True)
     lowest_since: Mapped[float | None] = mapped_column(Float, nullable=True)
     hold_days: Mapped[int] = mapped_column(default=10)
+    name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     target_hit_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     days_to_target: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)

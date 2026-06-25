@@ -3,7 +3,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import SignalHistory
-from app.services.history import get_history_stats, history_to_dict, update_open_signals
+from app.services.history import (
+    backfill_history_names,
+    get_history_stats,
+    history_to_dict,
+    update_open_signals,
+)
 from app.services.market_data import fetch_quote
 
 router = APIRouter(prefix="/api/history", tags=["history"])
@@ -15,6 +20,7 @@ def list_history(
     db: Session = Depends(get_db),
 ):
     update_open_signals(db)
+    backfill_history_names(db)
     query = db.query(SignalHistory)
     if market:
         query = query.filter(SignalHistory.market == market.upper())

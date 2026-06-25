@@ -4,12 +4,44 @@ from datetime import datetime
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from app.models import SignalHistory
+from app.models import SignalHistory, WishlistItem
 from app.services.market import bar_end_from_ts, trade_window_end
-from app.services.market_data import fetch_history
+from app.services.market_data import fetch_history, fetch_quote
+from app.services.search import resolve_symbol_name
 from app.services.signals import TradeSignal
 
 logger = logging.getLogger(__name__)
+
+
+def _lookup_symbol_name(db: Session, symbol: str, market: str) -> str | None:
+    item = (
+        db.query(WishlistItem)
+        .filter(WishlistItem.symbol == symbol.upper(), WishlistItem.market == market.upper())
+        .first()
+    )
+    if item and item.name:
+        return item.name
+    return resolve_symbol_name(symbol)
+
+
+def _ensure_record_name(db: Session, record: SignalHistory) -> bool:
+    if record.name:
+        return False
+    name = _lookup_symbol_name(db, record.symbol, record.market)
+    if name:
+        record.name = name
+        return True
+    return False
+
+
+def backfill_history_names(db: Session) -> int:
+    updated = 0
+    for record in db.query(SignalHistory).filter(SignalHistory.name.is_(None)).all():
+        if _ensure_record_name(db, record):
+            updated += 1
+    if updated:
+        db.commit()
+    return updated
 
 
 def save_buy_signal(db: Session, signal: TradeSignal, market: str = "US") -> SignalHistory | None:
@@ -33,10 +65,12 @@ def save_buy_signal(db: Session, signal: TradeSignal, market: str = "US") -> Sig
     plan = signal.trade_plan
     created_at = datetime.utcnow()
     expires_at = trade_window_end(created_at, plan.hold_days)
+    company_name = _lookup_symbol_name(db, symbol, market)
 
     record = SignalHistory(
         symbol=symbol,
         market=market,
+        name=company_name,
         action=signal.action.value,
         entry_price=plan.entry_price,
         sell_target=plan.sell_target,
@@ -89,6 +123,35 @@ def _close_record(
 
 def _days_in_window(created: datetime, hit_at: datetime) -> int:
     return max((hit_at.date() - created.date()).days, 0)
+
+
+def _try_live_close(record: SignalHistory, price: float, now: datetime) -> bool:
+    """
+    Close open trade using latest price (intraday / live).
+    Runs after signal time so same-day moves count once the signal exists.
+    """
+    if now < record.created_at or now > record.expires_at:
+        return False
+
+    if price <= record.stop_loss:
+        result = (record.stop_loss - record.entry_price) / record.entry_price * 100
+        _close_record(record, "stop_hit", record.stop_loss, result, now)
+        return True
+
+    if price >= record.sell_target:
+        result = (record.sell_target - record.entry_price) / record.entry_price * 100
+        _close_record(
+            record,
+            "target_hit",
+            record.sell_target,
+            result,
+            now,
+            target_hit_at=now,
+            days_to_target=_days_in_window(record.created_at, now),
+        )
+        return True
+
+    return False
 
 
 def _evaluate_bars(record: SignalHistory, since: pd.DataFrame, now: datetime) -> bool:
@@ -175,27 +238,44 @@ def update_open_signals(db: Session) -> int:
 
     for record in open_records:
         try:
+            quote = fetch_quote(record.symbol)
+            current = float(quote["price"])
+
             df = fetch_history(record.symbol, period="3mo", interval="1d")
             entry_date = pd.Timestamp(record.created_at.date())
             mask = df.index >= entry_date
             since = df.loc[mask] if mask.any() else pd.DataFrame()
 
             if since.empty:
-                if now >= record.expires_at:
+                new_high = round(max(record.highest_since or current, current), 2)
+                new_low = round(min(record.lowest_since or current, current), 2)
+                if new_high != record.highest_since or new_low != record.lowest_since:
+                    record.highest_since = new_high
+                    record.lowest_since = new_low
+                    dirty = True
+                if _try_live_close(record, current, now):
+                    updated += 1
+                    dirty = True
+                elif now >= record.expires_at:
                     _close_record(record, "expired_loss", record.entry_price, 0.0, now)
                     updated += 1
+                    dirty = True
                 continue
 
-            high = float(since["High"].max())
-            low = float(since["Low"].min())
-            current = float(since["Close"].iloc[-1])
+            bar_high = float(since["High"].max())
+            bar_low = float(since["Low"].min())
 
-            new_high = round(max(record.highest_since or current, high), 2)
-            new_low = round(min(record.lowest_since or current, low), 2)
+            new_high = round(max(record.highest_since or current, bar_high, current), 2)
+            new_low = round(min(record.lowest_since or current, bar_low, current), 2)
             if new_high != record.highest_since or new_low != record.lowest_since:
                 record.highest_since = new_high
                 record.lowest_since = new_low
                 dirty = True
+
+            if _try_live_close(record, current, now):
+                updated += 1
+                dirty = True
+                continue
 
             if _evaluate_bars(record, since, now):
                 updated += 1
@@ -227,6 +307,7 @@ def history_to_dict(record: SignalHistory, current_price: float | None = None) -
     return {
         "id": record.id,
         "symbol": record.symbol,
+        "name": record.name,
         "market": record.market,
         "action": record.action,
         "entry_price": record.entry_price,

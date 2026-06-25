@@ -73,6 +73,7 @@ export interface StockSignal {
 export interface HistoryRecord {
   id: number;
   symbol: string;
+  name?: string | null;
   market: Market;
   action: string;
   entry_price: number;
