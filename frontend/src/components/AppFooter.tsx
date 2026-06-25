@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const BUILD_VERSION = "1.2.8";
+const BUILD_VERSION = "1.2.9";
 
 export default function AppFooter() {
   const [version, setVersion] = useState(BUILD_VERSION);

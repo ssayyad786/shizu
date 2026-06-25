@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, currencyForMarket, HistoryRecord, HistoryStats, Market } from "../api";
 
 const MARKETS: { id: Market; label: string }[] = [
@@ -34,23 +34,31 @@ export default function HistoryPanel() {
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [stats, setStats] = useState<HistoryStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const load = async (m: Market = market) => {
-    setLoading(true);
+  const load = useCallback(async (m: Market = market, silent = false) => {
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const data = await api.getHistory(m);
       setRecords(data.signals);
       setStats(data.stats);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [market]);
 
   useEffect(() => {
-    load(market);
-    const interval = setInterval(() => load(market), 30000);
+    load(market, false);
+    const interval = setInterval(() => load(market, true), 60000);
     return () => clearInterval(interval);
-  }, [market]);
+  }, [market, load]);
+
+  const hasData = records.length > 0 || stats !== null;
 
   return (
     <div className="history-panel">
@@ -76,7 +84,11 @@ export default function HistoryPanel() {
         ))}
       </div>
 
-      {loading ? (
+      {refreshing && hasData && (
+        <p className="scan-info history-refresh-hint">Updating outcomes…</p>
+      )}
+
+      {loading && !hasData ? (
         <p style={{ color: "var(--muted)" }}>Loading trade history…</p>
       ) : (
         <>
@@ -191,7 +203,7 @@ export default function HistoryPanel() {
             </div>
           )}
 
-          <button className="btn btn-ghost" onClick={() => load()} style={{ marginTop: 16 }}>
+          <button className="btn btn-ghost" onClick={() => load(market, true)} style={{ marginTop: 16 }}>
             Refresh outcomes
           </button>
         </>

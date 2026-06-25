@@ -529,6 +529,11 @@ input {
   flex-wrap: wrap;
 }
 
+.history-refresh-hint {
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+}
+
 .history-symbol {
   font-family: var(--mono);
   font-weight: 700;

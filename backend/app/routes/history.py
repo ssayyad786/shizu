@@ -1,12 +1,9 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import SignalHistory
 from app.services.history import (
-    _apply_live_price,
     backfill_history_names,
     get_history_stats,
     history_to_dict,
@@ -28,21 +25,19 @@ def list_history(
     if market:
         query = query.filter(SignalHistory.market == market.upper())
     records = query.order_by(SignalHistory.created_at.desc()).all()
+    quote_cache: dict[str, float | None] = {}
     result = []
-    now = datetime.utcnow()
-    dirty = False
     for r in records:
         current = None
         if r.status == "open":
-            try:
-                current = float(fetch_quote(r.symbol)["price"])
-                if _apply_live_price(r, current, now):
-                    dirty = True
-            except Exception:
-                pass
+            sym = r.symbol.upper()
+            if sym not in quote_cache:
+                try:
+                    quote_cache[sym] = float(fetch_quote(sym)["price"])
+                except Exception:
+                    quote_cache[sym] = None
+            current = quote_cache[sym]
         result.append(history_to_dict(r, current))
-    if dirty:
-        db.commit()
     return {"signals": result, "stats": get_history_stats(db, market=market)}
 
 
