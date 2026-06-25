@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 from sqlalchemy.orm import Session
@@ -121,8 +121,37 @@ def _close_record(
         record.days_to_target = days_to_target
 
 
+def _naive_utc(dt: datetime) -> datetime:
+    """Normalize datetimes for safe comparison (SQLite may return aware values)."""
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def _history_since_entry(df: pd.DataFrame, created_at: datetime) -> pd.DataFrame:
+    """Daily bars on or after the signal date (timezone-safe)."""
+    if df.empty:
+        return df
+    work = df.copy()
+    if getattr(work.index, "tz", None) is not None:
+        work.index = work.index.tz_convert("UTC").tz_localize(None)
+    entry_date = pd.Timestamp(_naive_utc(created_at).date())
+    mask = work.index.normalize() >= entry_date
+    return work.loc[mask] if mask.any() else pd.DataFrame()
+
+
+def _apply_live_price(record: SignalHistory, price: float, now: datetime) -> bool:
+    """Update high/low extrema and close if live price hits target or stop."""
+    entry = record.entry_price
+    new_high = round(max(record.highest_since or entry, price), 2)
+    new_low = round(min(record.lowest_since or entry, price), 2)
+    record.highest_since = new_high
+    record.lowest_since = new_low
+    return _try_live_close(record, price, now)
+
+
 def _days_in_window(created: datetime, hit_at: datetime) -> int:
-    return max((hit_at.date() - created.date()).days, 0)
+    return max((_naive_utc(hit_at).date() - _naive_utc(created).date()).days, 0)
 
 
 def _try_live_close(record: SignalHistory, price: float, now: datetime) -> bool:
@@ -130,7 +159,11 @@ def _try_live_close(record: SignalHistory, price: float, now: datetime) -> bool:
     Close open trade using latest price (intraday / live).
     Runs after signal time so same-day moves count once the signal exists.
     """
-    if now < record.created_at or now > record.expires_at:
+    now = _naive_utc(now)
+    created = _naive_utc(record.created_at)
+    expires = _naive_utc(record.expires_at)
+
+    if now < created or now > expires:
         return False
 
     if price <= record.stop_loss:
@@ -163,8 +196,9 @@ def _evaluate_bars(record: SignalHistory, since: pd.DataFrame, now: datetime) ->
     - Success only if target is hit on a bar ending on or before expires_at.
     - Target after the window does not count.
     """
-    created = record.created_at
-    expires = record.expires_at
+    created = _naive_utc(record.created_at)
+    expires = _naive_utc(record.expires_at)
+    now = _naive_utc(now)
     signal_day = created.date()
     last_in_window_close: float | None = None
 
@@ -237,45 +271,40 @@ def update_open_signals(db: Session) -> int:
     now = datetime.utcnow()
 
     for record in open_records:
+        current: float | None = None
         try:
-            quote = fetch_quote(record.symbol)
-            current = float(quote["price"])
+            current = float(fetch_quote(record.symbol)["price"])
+        except Exception as e:
+            logger.warning("Quote failed for %s: %s", record.symbol, e)
 
-            df = fetch_history(record.symbol, period="3mo", interval="1d")
-            entry_date = pd.Timestamp(record.created_at.date())
-            mask = df.index >= entry_date
-            since = df.loc[mask] if mask.any() else pd.DataFrame()
-
-            if since.empty:
-                new_high = round(max(record.highest_since or current, current), 2)
-                new_low = round(min(record.lowest_since or current, current), 2)
-                if new_high != record.highest_since or new_low != record.lowest_since:
-                    record.highest_since = new_high
-                    record.lowest_since = new_low
-                    dirty = True
-                if _try_live_close(record, current, now):
+        if current is not None:
+            try:
+                if _apply_live_price(record, current, now):
                     updated += 1
                     dirty = True
-                elif now >= record.expires_at:
+                    continue
+                dirty = True
+            except Exception as e:
+                logger.warning("Live update failed for %s: %s", record.symbol, e)
+
+        try:
+            df = fetch_history(record.symbol, period="3mo", interval="1d")
+            since = _history_since_entry(df, record.created_at)
+
+            if since.empty:
+                if current is not None and now >= _naive_utc(record.expires_at):
                     _close_record(record, "expired_loss", record.entry_price, 0.0, now)
                     updated += 1
                     dirty = True
                 continue
 
-            bar_high = float(since["High"].max())
-            bar_low = float(since["Low"].min())
-
-            new_high = round(max(record.highest_since or current, bar_high, current), 2)
-            new_low = round(min(record.lowest_since or current, bar_low, current), 2)
-            if new_high != record.highest_since or new_low != record.lowest_since:
-                record.highest_since = new_high
-                record.lowest_since = new_low
+            if current is not None:
+                bar_high = float(since["High"].max())
+                bar_low = float(since["Low"].min())
+                entry = record.entry_price
+                record.highest_since = round(max(record.highest_since or entry, bar_high, current), 2)
+                record.lowest_since = round(min(record.lowest_since or entry, bar_low, current), 2)
                 dirty = True
-
-            if _try_live_close(record, current, now):
-                updated += 1
-                dirty = True
-                continue
 
             if _evaluate_bars(record, since, now):
                 updated += 1
@@ -289,11 +318,9 @@ def update_open_signals(db: Session) -> int:
 
 
 def _is_success(record: SignalHistory) -> bool:
-    return (
-        record.status == "target_hit"
-        and record.target_hit_at is not None
-        and record.target_hit_at <= record.expires_at
-    )
+    if record.status != "target_hit" or record.target_hit_at is None:
+        return False
+    return _naive_utc(record.target_hit_at) <= _naive_utc(record.expires_at)
 
 
 def history_to_dict(record: SignalHistory, current_price: float | None = None) -> dict:
@@ -302,7 +329,7 @@ def history_to_dict(record: SignalHistory, current_price: float | None = None) -
         progress_pct = round((current_price - record.entry_price) / record.entry_price * 100, 2)
 
     now = datetime.utcnow()
-    window_open = record.status == "open" and now <= record.expires_at
+    window_open = record.status == "open" and _naive_utc(now) <= _naive_utc(record.expires_at)
 
     return {
         "id": record.id,
