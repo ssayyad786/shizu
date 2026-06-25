@@ -59,51 +59,17 @@ def remove_cached_signal(symbol: str, market: str) -> None:
 
 
 def remove_cached_holding(symbol: str, market: str) -> None:
-
     _holdings_signals.pop(_cache_key(symbol, market), None)
 
 
-
-
-
-def get_cached_holdings_signals(market: str | None = None) -> tuple[list[dict], datetime | None]:
-
-    signals = sorted(
-        _holdings_signals.values(),
-        key=lambda s: (
-            0 if s.get("advice", {}).get("recommendation") == "SELL" else 1,
-            -abs(s.get("score", 0)),
-        ),
-    )
-
-    if market:
-
-        signals = [s for s in signals if s.get("market") == market.upper()]
-
-    return signals, _last_holdings_scan
-
+def get_cached_signals(market: str | None = None) -> tuple[list[dict], datetime | None]:
     signals = sorted(_latest_signals.values(), key=lambda s: s["score"], reverse=True)
-
     if market:
-
         signals = [s for s in signals if s.get("market") == market.upper()]
-
     return signals, _last_scan
 
 
-
-
-
-def remove_cached_holding(symbol: str, market: str) -> None:
-
-    _holdings_signals.pop(_cache_key(symbol, market), None)
-
-
-
-
-
 def get_cached_holdings_signals(market: str | None = None) -> tuple[list[dict], datetime | None]:
-
     signals = sorted(
         _holdings_signals.values(),
         key=lambda s: (
@@ -111,15 +77,9 @@ def get_cached_holdings_signals(market: str | None = None) -> tuple[list[dict], 
             -abs(s.get("score", 0)),
         ),
     )
-
     if market:
-
         signals = [s for s in signals if s.get("market") == market.upper()]
-
     return signals, _last_holdings_scan
-
-
-
 
 
 def scan_symbol(symbol: str, db: Session | None = None, market: str | None = None) -> dict:

@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.4.0
+Version:        1.4.1
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,8 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Mon Jun 23 2026 Shizu <admin@localhost> - 1.4.1-1
+- Fix API crash: restore get_cached_signals removed in 1.4.0; non-blocking startup scan
 * Mon Jun 23 2026 Shizu <admin@localhost> - 1.4.0-1
 - My Holdings tab: sell/hold advice for owned stocks with avg cost and P&L
 * Mon Jun 23 2026 Shizu <admin@localhost> - 1.3.1-1

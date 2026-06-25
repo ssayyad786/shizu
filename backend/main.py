@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request
@@ -47,17 +48,26 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Data directory: %s", data_dir)
     logger.info("Database file: %s", db_path)
-    scheduler.add_job(_run_scheduled_scan, "interval", minutes=SCAN_INTERVAL_MINUTES, id="market_scan")
+    scheduler.add_job(
+        _run_scheduled_scan,
+        "interval",
+        minutes=SCAN_INTERVAL_MINUTES,
+        id="market_scan",
+        next_run_time=datetime.utcnow(),
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.add_job(
         _run_history_purge,
         "interval",
         hours=PURGE_INTERVAL_HOURS,
         id="history_purge",
+        next_run_time=datetime.utcnow(),
+        max_instances=1,
+        coalesce=True,
     )
     scheduler.start()
     logger.info("Market monitor started — scanning every %d minutes", SCAN_INTERVAL_MINUTES)
-    _run_scheduled_scan()
-    _run_history_purge()
     yield
     scheduler.shutdown()
 
