@@ -115,6 +115,15 @@ export interface HistoryStats {
   avg_result_pct: number;
 }
 
+export interface HistoryPage {
+  signals: HistoryRecord[];
+  stats: HistoryStats;
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
 export interface Candle {
   time: number;
   open: number;
@@ -225,8 +234,16 @@ export const api = {
     request<StockDetail>(`/stocks/${symbol}?period=${period}&interval=${interval}`),
   searchStocks: (q: string) =>
     request<{ query: string; results: StockSearchResult[] }>(`/search?q=${encodeURIComponent(q)}`),
-  getHistory: (market?: Market) =>
-    request<{ signals: HistoryRecord[]; stats: HistoryStats }>(
-      market ? `/history?market=${market}` : "/history"
-    ),
+  getHistory: (
+    market?: Market,
+    opts?: { limit?: number; offset?: number; refresh?: boolean }
+  ) => {
+    const params = new URLSearchParams();
+    if (market) params.set("market", market);
+    if (opts?.limit != null) params.set("limit", String(opts.limit));
+    if (opts?.offset != null) params.set("offset", String(opts.offset));
+    if (opts?.refresh != null) params.set("refresh", opts.refresh ? "true" : "false");
+    const qs = params.toString();
+    return request<HistoryPage>(`/history${qs ? `?${qs}` : ""}`);
+  },
 };

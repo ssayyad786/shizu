@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.2.9
+Version:        1.3.0
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,8 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Mon Jun 23 2025 Shizu <admin@localhost> - 1.3.0-1
+- History pagination (30/page), SQL stats, deduped quotes for open trades
 * Mon Jun 23 2025 Shizu <admin@localhost> - 1.2.9-1
 - History tab: silent background refresh (no loading flash), faster API
 * Mon Jun 23 2025 Shizu <admin@localhost> - 1.2.8-1

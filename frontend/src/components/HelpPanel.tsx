@@ -153,9 +153,8 @@ export default function HelpPanel() {
           <p className="help-chart">
             <strong>Target only if achievable:</strong> if the ATR target would need more than 10 trading
             days, Shizu shows <strong>HOLD</strong> instead — no sell target, no stop, nothing saved to History.
-            Outcome checks in History start from the <strong>next trading day</strong> for daily bars,
-            and also use the <strong>latest price</strong> so same-day target hits count once the signal exists.
-            A trade is <strong>successful</strong> only if the sell target is hit before the window ends.
+            Outcome checks use the <strong>latest price</strong> for open trades. History lists{" "}
+            <strong>30 signals per page</strong> (load more for older rows). Stats cover all saved signals.
           </p>
         </div>
       </section>

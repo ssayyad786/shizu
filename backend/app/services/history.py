@@ -12,6 +12,10 @@ from app.services.signals import TradeSignal
 
 logger = logging.getLogger(__name__)
 
+HISTORY_DEFAULT_LIMIT = 30
+HISTORY_MAX_LIMIT = 100
+NAME_BACKFILL_BATCH = 10
+
 
 def _lookup_symbol_name(db: Session, symbol: str, market: str) -> str | None:
     item = (
@@ -34,9 +38,16 @@ def _ensure_record_name(db: Session, record: SignalHistory) -> bool:
     return False
 
 
-def backfill_history_names(db: Session) -> int:
+def backfill_history_names(db: Session, limit: int = NAME_BACKFILL_BATCH) -> int:
     updated = 0
-    for record in db.query(SignalHistory).filter(SignalHistory.name.is_(None)).all():
+    rows = (
+        db.query(SignalHistory)
+        .filter(SignalHistory.name.is_(None))
+        .order_by(SignalHistory.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    for record in rows:
         if _ensure_record_name(db, record):
             updated += 1
     if updated:
@@ -270,12 +281,17 @@ def update_open_signals(db: Session) -> int:
     dirty = False
     now = datetime.utcnow()
 
-    for record in open_records:
-        current: float | None = None
+    # One Yahoo quote per symbol (not per row).
+    quote_cache: dict[str, float | None] = {}
+    for sym in {r.symbol.upper() for r in open_records}:
         try:
-            current = float(fetch_quote(record.symbol)["price"])
+            quote_cache[sym] = float(fetch_quote(sym)["price"])
         except Exception as e:
-            logger.warning("Quote failed for %s: %s", record.symbol, e)
+            logger.warning("Quote failed for %s: %s", sym, e)
+            quote_cache[sym] = None
+
+    for record in open_records:
+        current = quote_cache.get(record.symbol.upper())
 
         if current is not None:
             try:
@@ -364,32 +380,79 @@ def history_to_dict(record: SignalHistory, current_price: float | None = None) -
 
 
 def get_history_stats(db: Session, market: str | None = None) -> dict:
-    query = db.query(SignalHistory)
+    from sqlalchemy import func
+
+    base = db.query(SignalHistory)
     if market:
-        query = query.filter(SignalHistory.market == market.upper())
+        base = base.filter(SignalHistory.market == market.upper())
 
-    all_records = query.all()
-    closed = [r for r in all_records if r.status != "open"]
-    open_count = sum(1 for r in all_records if r.status == "open")
+    total = base.count()
+    open_count = base.filter(SignalHistory.status == "open").count()
+    closed_count = total - open_count
+    target_hits = base.filter(SignalHistory.status == "target_hit").count()
+    stop_hits = base.filter(SignalHistory.status == "stop_hit").count()
+    expired = base.filter(SignalHistory.status.like("expired%")).count()
 
-    target_hits = [r for r in closed if _is_success(r)]
-    stop_hits = [r for r in closed if r.status == "stop_hit"]
-    expired = [r for r in closed if r.status.startswith("expired")]
+    avg_result = (
+        db.query(func.avg(SignalHistory.result_pct))
+        .filter(SignalHistory.status != "open")
+    )
+    if market:
+        avg_result = avg_result.filter(SignalHistory.market == market.upper())
+    avg_val = avg_result.scalar()
+    avg_result_pct = round(float(avg_val), 2) if avg_val is not None else 0.0
 
-    total_closed = len(closed)
-    win_rate = round(len(target_hits) / total_closed * 100, 1) if total_closed else 0
-    avg_result = round(sum(r.result_pct or 0 for r in closed) / total_closed, 2) if total_closed else 0
+    win_rate = round(target_hits / closed_count * 100, 1) if closed_count else 0.0
 
     return {
         "market": market.upper() if market else None,
-        "total_signals": total_closed + open_count,
+        "total_signals": total,
         "open": open_count,
-        "closed": total_closed,
-        "wins": len(target_hits),
-        "losses": total_closed - len(target_hits),
-        "target_hits": len(target_hits),
-        "stop_hits": len(stop_hits),
-        "expired": len(expired),
+        "closed": closed_count,
+        "wins": target_hits,
+        "losses": closed_count - target_hits,
+        "target_hits": target_hits,
+        "stop_hits": stop_hits,
+        "expired": expired,
         "win_rate": win_rate,
-        "avg_result_pct": avg_result,
+        "avg_result_pct": avg_result_pct,
     }
+
+
+def list_history_page(
+    db: Session,
+    market: str | None,
+    limit: int,
+    offset: int,
+) -> tuple[list[SignalHistory], int]:
+    query = db.query(SignalHistory)
+    if market:
+        query = query.filter(SignalHistory.market == market.upper())
+    total = query.count()
+    rows = (
+        query.order_by(SignalHistory.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return rows, total
+
+
+def records_to_dicts(
+    records: list[SignalHistory],
+    quote_cache: dict[str, float | None] | None = None,
+) -> list[dict]:
+    quote_cache = quote_cache or {}
+    result = []
+    for r in records:
+        current = None
+        if r.status == "open":
+            sym = r.symbol.upper()
+            if sym not in quote_cache:
+                try:
+                    quote_cache[sym] = float(fetch_quote(sym)["price"])
+                except Exception:
+                    quote_cache[sym] = None
+            current = quote_cache[sym]
+        result.append(history_to_dict(r, current))
+    return result

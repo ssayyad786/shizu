@@ -529,6 +529,10 @@ input {
   flex-wrap: wrap;
 }
 
+.history-count {
+  margin-bottom: 12px;
+}
+
 .history-refresh-hint {
   margin-bottom: 8px;
   font-size: 0.8rem;

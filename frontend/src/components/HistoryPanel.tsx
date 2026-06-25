@@ -29,32 +29,60 @@ function fmtPrice(n: number, market: Market) {
   return `${sym}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+const PAGE_SIZE = 30;
+
 export default function HistoryPanel() {
   const [market, setMarket] = useState<Market>("US");
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [stats, setStats] = useState<HistoryStats | null>(null);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const load = useCallback(async (m: Market = market, silent = false) => {
+  const load = useCallback(async (m: Market, silent = false, refresh = true) => {
     if (silent) {
       setRefreshing(true);
     } else {
       setLoading(true);
     }
     try {
-      const data = await api.getHistory(m);
+      const data = await api.getHistory(m, {
+        limit: PAGE_SIZE,
+        offset: 0,
+        refresh,
+      });
       setRecords(data.signals);
       setStats(data.stats);
+      setTotal(data.total);
+      setHasMore(data.has_more);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [market]);
 
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const data = await api.getHistory(market, {
+        limit: PAGE_SIZE,
+        offset: records.length,
+        refresh: false,
+      });
+      setRecords((prev) => [...prev, ...data.signals]);
+      setTotal(data.total);
+      setHasMore(data.has_more);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   useEffect(() => {
-    load(market, false);
-    const interval = setInterval(() => load(market, true), 60000);
+    setRecords([]);
+    load(market, false, true);
+    const interval = setInterval(() => load(market, true, true), 60000);
     return () => clearInterval(interval);
   }, [market, load]);
 
@@ -126,6 +154,10 @@ export default function HistoryPanel() {
               </p>
             </div>
           ) : (
+            <>
+            <p className="scan-info history-count">
+              Showing {records.length} of {total} signal{total === 1 ? "" : "s"}
+            </p>
             <div className="history-list">
               {records.map((r) => {
                 const st = statusLabel(r);
@@ -201,9 +233,25 @@ export default function HistoryPanel() {
                 );
               })}
             </div>
+
+            {hasMore && (
+              <button
+                className="btn btn-ghost"
+                onClick={loadMore}
+                disabled={loadingMore}
+                style={{ marginTop: 12 }}
+              >
+                {loadingMore ? "Loading…" : `Load more (${total - records.length} remaining)`}
+              </button>
+            )}
+            </>
           )}
 
-          <button className="btn btn-ghost" onClick={() => load(market, true)} style={{ marginTop: 16 }}>
+          <button
+            className="btn btn-ghost"
+            onClick={() => load(market, true, true)}
+            style={{ marginTop: 16 }}
+          >
             Refresh outcomes
           </button>
         </>
