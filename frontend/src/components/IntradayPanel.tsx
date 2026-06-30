@@ -31,76 +31,140 @@ function statusLabel(record: IntradayHistoryRecord) {
   }
 }
 
-function SetupCard({ signal }: { signal: IntradayLiveSignal }) {
+function SetupCard({
+  signal,
+  defaultOpen = false,
+  showTodayBadge = false,
+}: {
+  signal: IntradayLiveSignal;
+  defaultOpen?: boolean;
+  showTodayBadge?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const plan = signal.trade_plan;
   const isLong = signal.direction === "LONG";
+  const tone = isLong ? "long" : signal.direction === "SHORT" ? "short" : "hold";
+
   return (
-    <article className={`intraday-setup-card ${isLong ? "long" : "short"}`}>
-      <header className="intraday-setup-header">
-        <div>
-          <div className="intraday-symbol">{signal.symbol}</div>
-          <div className="intraday-direction">
-            {signal.direction} · {signal.confidence}% confidence
-          </div>
+    <article className={`intraday-card ${tone} ${open ? "expanded" : "collapsed"}`}>
+      <button
+        type="button"
+        className="intraday-card-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="intraday-chevron" aria-hidden>
+          {open ? "▾" : "▸"}
+        </span>
+        <div className="intraday-card-summary">
+          <span className="intraday-symbol">{signal.symbol}</span>
+          <span className={`intraday-dir-pill ${tone}`}>{signal.direction}</span>
+          <span className="intraday-summary-stat">{signal.confidence}%</span>
+          {plan && (
+            <>
+              <span className="intraday-summary-stat">@ {fmt(plan.entry_price)}</span>
+              <span className="intraday-summary-stat target-text">T1 {fmt(plan.target_1)}</span>
+              <span className="intraday-summary-stat stop-text">Stop {fmt(plan.stop_loss)}</span>
+            </>
+          )}
         </div>
-        <span className="intraday-badge-today">Today</span>
-      </header>
-      {plan && (
-        <div className="intraday-levels">
-          <div><span>Entry</span><strong>{fmt(plan.entry_price)}</strong></div>
-          <div className="target-text"><span>T1</span><strong>{fmt(plan.target_1)} (+{plan.target_1_pct}%)</strong></div>
-          <div className="target-text"><span>T2</span><strong>{fmt(plan.target_2)} (+{plan.target_2_pct}%)</strong></div>
-          <div className="stop-text"><span>Stop</span><strong>{fmt(plan.stop_loss)} (−{plan.stop_pct}%)</strong></div>
-          <div><span>R:R</span><strong>{plan.risk_reward}:1</strong></div>
-          <div><span>Hold</span><strong>~{plan.hold_minutes} min</strong></div>
+        {showTodayBadge && signal.actionable && (
+          <span className="intraday-badge-today">Today</span>
+        )}
+      </button>
+
+      {open && (
+        <div className="intraday-card-body">
+          {plan && (
+            <div className="intraday-levels">
+              <div><span>Entry</span><strong>{fmt(plan.entry_price)}</strong></div>
+              <div className="target-text"><span>T1</span><strong>{fmt(plan.target_1)} (+{plan.target_1_pct}%)</strong></div>
+              <div className="target-text"><span>T2</span><strong>{fmt(plan.target_2)} (+{plan.target_2_pct}%)</strong></div>
+              <div className="stop-text"><span>Stop</span><strong>{fmt(plan.stop_loss)} (−{plan.stop_pct}%)</strong></div>
+              <div><span>R:R</span><strong>{plan.risk_reward}:1</strong></div>
+              <div><span>Hold</span><strong>~{plan.hold_minutes} min</strong></div>
+            </div>
+          )}
+          {signal.vwap != null && (
+            <p className="intraday-meta">
+              VWAP {fmt(signal.vwap)} · RVOL {signal.rvol ?? "—"}× · Daily {signal.daily_trend}
+            </p>
+          )}
+          <p className="intraday-summary">{signal.summary}</p>
+          <WhyTradeBlock
+            headline={signal.why_headline}
+            reasons={signal.trade_reasons}
+            fallbackBullets={signal.reasoning}
+          />
         </div>
       )}
-      {signal.vwap != null && (
-        <p className="intraday-meta">VWAP {fmt(signal.vwap)} · RVOL {signal.rvol ?? "—"}× · Daily {signal.daily_trend}</p>
-      )}
-      <p className="intraday-summary">{signal.summary}</p>
-      <WhyTradeBlock
-        headline={signal.why_headline}
-        reasons={signal.trade_reasons}
-        fallbackBullets={signal.reasoning}
-      />
     </article>
   );
 }
 
-function TradeCard({ record }: { record: IntradayHistoryRecord }) {
+function TradeCard({
+  record,
+  defaultOpen = false,
+}: {
+  record: IntradayHistoryRecord;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const st = statusLabel(record);
   const isLong = record.direction === "LONG";
+  const tone = isLong ? "long" : "short";
+
   return (
-    <article className={`intraday-trade-card ${st.className} ${isLong ? "long" : "short"}`}>
-      <header>
-        <div className="intraday-symbol">{record.symbol}</div>
-        {record.name && <div className="intraday-name">{record.name}</div>}
-      </header>
-      <div className={`intraday-status ${st.className}`}>{st.text}</div>
-      <div className="intraday-levels compact">
-        <div><span>{record.direction}</span><strong>{fmt(record.entry_price)}</strong></div>
-        <div><span>T1</span><strong>{fmt(record.target_1)}</strong></div>
-        <div><span>Stop</span><strong>{fmt(record.stop_loss)}</strong></div>
-        {record.current_price != null && (
-          <div><span>Now</span><strong>{fmt(record.current_price)}</strong></div>
-        )}
-        {record.progress_pct != null && record.status === "open" && (
-          <div><span>P&amp;L</span><strong className={record.progress_pct >= 0 ? "pnl-up" : "pnl-down"}>
-            {record.progress_pct > 0 ? "+" : ""}{record.progress_pct}%
-          </strong></div>
-        )}
-        {record.result_pct != null && record.status !== "open" && (
-          <div><span>Result</span><strong className={record.result_pct >= 0 ? "pnl-up" : "pnl-down"}>
-            {record.result_pct > 0 ? "+" : ""}{record.result_pct}%
-          </strong></div>
-        )}
-      </div>
-      <WhyTradeBlock
-        headline={record.why_headline}
-        reasons={record.trade_reasons}
-        fallbackBullets={record.reasoning}
-      />
+    <article className={`intraday-card ${tone} ${st.className} ${open ? "expanded" : "collapsed"}`}>
+      <button
+        type="button"
+        className="intraday-card-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="intraday-chevron" aria-hidden>
+          {open ? "▾" : "▸"}
+        </span>
+        <div className="intraday-card-summary">
+          <span className="intraday-symbol">{record.symbol}</span>
+          {record.name && <span className="intraday-name-inline">{record.name}</span>}
+          <span className={`intraday-dir-pill ${tone}`}>{record.direction}</span>
+          <span className="intraday-summary-stat">@ {fmt(record.entry_price)}</span>
+          <span className={`intraday-status-inline ${st.className}`}>{st.text}</span>
+          {record.progress_pct != null && record.status === "open" && (
+            <span className={`intraday-summary-stat ${record.progress_pct >= 0 ? "pnl-up" : "pnl-down"}`}>
+              {record.progress_pct > 0 ? "+" : ""}{record.progress_pct}%
+            </span>
+          )}
+          {record.result_pct != null && record.status !== "open" && (
+            <span className={`intraday-summary-stat ${record.result_pct >= 0 ? "pnl-up" : "pnl-down"}`}>
+              {record.result_pct > 0 ? "+" : ""}{record.result_pct}%
+            </span>
+          )}
+        </div>
+      </button>
+
+      {open && (
+        <div className="intraday-card-body">
+          <div className={`intraday-status ${st.className}`}>{st.text}</div>
+          <div className="intraday-levels compact">
+            <div><span>{record.direction}</span><strong>{fmt(record.entry_price)}</strong></div>
+            <div><span>T1</span><strong>{fmt(record.target_1)}</strong></div>
+            <div><span>T2</span><strong>{fmt(record.target_2)}</strong></div>
+            <div><span>Stop</span><strong>{fmt(record.stop_loss)}</strong></div>
+            {record.current_price != null && (
+              <div><span>Now</span><strong>{fmt(record.current_price)}</strong></div>
+            )}
+            <div><span>R:R</span><strong>{record.risk_reward}:1</strong></div>
+          </div>
+          <p className="intraday-summary">{record.summary}</p>
+          <WhyTradeBlock
+            headline={record.why_headline}
+            reasons={record.trade_reasons}
+            fallbackBullets={record.reasoning}
+          />
+        </div>
+      )}
     </article>
   );
 }
@@ -193,7 +257,7 @@ export default function IntradayPanel() {
       <div className="intraday-toolbar">
         <p className="intraday-intro">
           US intraday model — VWAP, market structure, RVOL, EMA stack, opening range &amp; gap.
-          Scans every <strong>2 minutes</strong> during market hours.
+          Scans every <strong>2 minutes</strong>. Click a symbol to expand trade details.
         </p>
         <div className="intraday-toolbar-actions">
           {lastScan && <span className="scan-info">Last scan: {new Date(lastScan).toLocaleString()}</span>}
@@ -240,10 +304,10 @@ export default function IntradayPanel() {
       {(todaySetups.length > 0 || openTodayTrades.length > 0) && (
         <section className="intraday-section intraday-today">
           <h2>Today&apos;s trades — ready for market order</h2>
-          <p className="intraday-today-note">New setups and open positions for today appear here first.</p>
-          <div className="intraday-today-grid">
-            {todaySetups.map((s) => (
-              <SetupCard key={`setup-${s.symbol}`} signal={s} />
+          <p className="intraday-today-note">Tap a row to expand entry, targets, and why we suggest the trade.</p>
+          <div className="intraday-card-list">
+            {todaySetups.map((s, i) => (
+              <SetupCard key={`setup-${s.symbol}`} signal={s} showTodayBadge defaultOpen={i === 0} />
             ))}
             {openTodayTrades.map((t) => (
               <TradeCard key={`trade-${t.id}`} record={t} />
@@ -261,7 +325,7 @@ export default function IntradayPanel() {
       ) : (
         <section className="intraday-section">
           <h2 className="section-title">Live signals</h2>
-          <div className="intraday-signals-grid">
+          <div className="intraday-card-list">
             {signals.map((s) => (
               <SetupCard key={s.symbol} signal={s} />
             ))}
@@ -275,7 +339,7 @@ export default function IntradayPanel() {
         {history.length === 0 ? (
           <div className="empty-state"><p>No intraday trades recorded yet.</p></div>
         ) : (
-          <div className="intraday-history-list">
+          <div className="intraday-card-list">
             {history.map((r) => (
               <TradeCard key={r.id} record={r} />
             ))}

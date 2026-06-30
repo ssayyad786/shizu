@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.5.1
+Version:        1.5.2
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,8 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.2-1
+- Intraday cards: collapsible rows — click symbol to expand trade details
 * Mon Jun 23 2026 Shizu <admin@localhost> - 1.5.1-1
 - Intraday: per-trade Why this trade reasons; expanded Help technology section
 * Mon Jun 23 2026 Shizu <admin@localhost> - 1.5.0-1
