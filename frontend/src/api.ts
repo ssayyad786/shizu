@@ -72,6 +72,113 @@ export interface HoldingFormData {
   purchase_date?: string;
 }
 
+export interface IntradayWatchlistItem {
+  id: number;
+  symbol: string;
+  name: string | null;
+  created_at: string;
+}
+
+export interface IntradayTradePlan {
+  direction: string;
+  entry_price: number;
+  stop_loss: number;
+  target_1: number;
+  target_2: number;
+  stop_pct: number;
+  target_1_pct: number;
+  target_2_pct: number;
+  risk_reward: number;
+  hold_minutes: number;
+  expires_at: string;
+}
+
+export interface IntradayTradeReason {
+  factor: string;
+  weight: string;
+  bias: string;
+  detail: string;
+}
+
+export interface IntradayLiveSignal {
+  symbol: string;
+  direction: string;
+  confidence: number;
+  price: number;
+  score: number;
+  summary: string;
+  actionable: boolean;
+  reasoning: string[];
+  why_headline?: string;
+  trade_reasons?: IntradayTradeReason[];
+  vwap?: number | null;
+  rvol?: number | null;
+  daily_trend?: string | null;
+  indicators: IndicatorSignal[];
+  trade_plan?: IntradayTradePlan | null;
+  scanned_at?: string;
+}
+
+export interface IntradayHistoryRecord {
+  id: number;
+  symbol: string;
+  name?: string | null;
+  direction: string;
+  entry_price: number;
+  stop_loss: number;
+  target_1: number;
+  target_2: number;
+  stop_pct: number;
+  target_1_pct: number;
+  target_2_pct: number;
+  risk_reward: number;
+  hold_minutes: number;
+  confidence: number;
+  score: number;
+  summary: string;
+  reasoning: string[];
+  why_headline?: string;
+  trade_reasons?: IntradayTradeReason[];
+  status: string;
+  exit_price: number | null;
+  result_pct: number | null;
+  success: boolean;
+  is_today: boolean;
+  trade_date: string;
+  created_at: string;
+  expires_at: string;
+  closed_at: string | null;
+  target_hit_at: string | null;
+  current_price?: number | null;
+  progress_pct?: number | null;
+}
+
+export interface IntradayStats {
+  total_signals: number;
+  open: number;
+  closed: number;
+  wins: number;
+  losses: number;
+  target_hits: number;
+  stop_hits: number;
+  expired: number;
+  win_rate: number;
+  avg_result_pct: number;
+  today_closed: number;
+  today_wins: number;
+  today_win_rate: number;
+}
+
+export interface IntradayHistoryPage {
+  signals: IntradayHistoryRecord[];
+  today_trades: IntradayHistoryRecord[];
+  stats: IntradayStats;
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
 export interface BulkInvalidSymbol {
   symbol: string;
   reason: string;
@@ -346,4 +453,41 @@ export const api = {
       "/holdings/scan",
       { method: "POST" }
     ),
+  getIntradayWatchlist: () => request<IntradayWatchlistItem[]>("/intraday/watchlist"),
+  addIntradaySymbol: (symbol: string, name?: string) =>
+    request<IntradayWatchlistItem>("/intraday/watchlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, name }),
+    }),
+  bulkAddIntraday: (symbols: string[]) =>
+    request<{ added: IntradayWatchlistItem[]; skipped: string[]; invalid: BulkInvalidSymbol[] }>(
+      "/intraday/watchlist/bulk",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbols }),
+      }
+    ),
+  removeIntradaySymbol: (symbol: string) =>
+    request<{ ok: boolean }>(`/intraday/watchlist/${symbol}`, { method: "DELETE" }),
+  getIntradaySignals: () =>
+    request<{
+      signals: IntradayLiveSignal[];
+      today_setups: IntradayLiveSignal[];
+      last_scan: string | null;
+    }>("/intraday/signals"),
+  triggerIntradayScan: () =>
+    request<{ scanned: number; today_setups: IntradayLiveSignal[]; signals: IntradayLiveSignal[] }>(
+      "/intraday/scan",
+      { method: "POST" }
+    ),
+  getIntradayHistory: (opts?: { limit?: number; offset?: number; refresh?: boolean }) => {
+    const params = new URLSearchParams();
+    if (opts?.limit != null) params.set("limit", String(opts.limit));
+    if (opts?.offset != null) params.set("offset", String(opts.offset));
+    if (opts?.refresh != null) params.set("refresh", opts.refresh ? "true" : "false");
+    const qs = params.toString();
+    return request<IntradayHistoryPage>(`/intraday/history${qs ? `?${qs}` : ""}`);
+  },
 };

@@ -8,8 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.database import SessionLocal, get_data_dir, get_db_path, init_db
-from app.routes import history, holdings, stocks, wishlist
+from app.routes import history, holdings, intraday, stocks, wishlist
 from app.services.history import purge_old_history
+from app.services.intraday_monitor import scan_intraday_watchlist
 from app.services.monitor import scan_holdings, scan_wishlist
 from app.version import __version__
 
@@ -17,6 +18,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 SCAN_INTERVAL_MINUTES = 5
+INTRADAY_SCAN_MINUTES = 2
 PURGE_INTERVAL_HOURS = 24
 scheduler = BackgroundScheduler()
 
@@ -27,6 +29,13 @@ def _run_scheduled_scan() -> None:
         scan_holdings()
     except Exception as e:
         logger.warning("Scheduled scan failed: %s", e)
+
+
+def _run_intraday_scan() -> None:
+    try:
+        scan_intraday_watchlist()
+    except Exception as e:
+        logger.warning("Intraday scan failed: %s", e)
 
 
 def _run_history_purge() -> None:
@@ -53,6 +62,15 @@ async def lifespan(app: FastAPI):
         "interval",
         minutes=SCAN_INTERVAL_MINUTES,
         id="market_scan",
+        next_run_time=datetime.utcnow(),
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        _run_intraday_scan,
+        "interval",
+        minutes=INTRADAY_SCAN_MINUTES,
+        id="intraday_scan",
         next_run_time=datetime.utcnow(),
         max_instances=1,
         coalesce=True,
@@ -97,6 +115,7 @@ app.include_router(wishlist.router)
 app.include_router(stocks.router)
 app.include_router(history.router)
 app.include_router(holdings.router)
+app.include_router(intraday.router)
 
 
 @app.get("/api/health")

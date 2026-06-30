@@ -74,6 +74,97 @@ const SIGNALS = [
   { action: "STRONG SELL", desc: "Score ≤ −0.45 — strongly bearish." },
 ];
 
+const INTRADAY_TECH = [
+  { label: "Data source", value: "Yahoo Finance via yfinance (free delayed quotes — not Level II)" },
+  { label: "Chart type", value: "OHLC candlesticks on 5m and 15m bars" },
+  { label: "Timeframes", value: "Daily (trend) · 15m (intraday trend) · 5m (entry & signals)" },
+  { label: "Scan frequency", value: "Every 2 minutes for symbols on your intraday watchlist" },
+  { label: "Session", value: "US Eastern (America/New_York); trades expire at market close (4:00 PM ET)" },
+  { label: "Engine", value: "Rule-based weighted scorer (not ML) — Python + pandas + ta library" },
+  { label: "Stops & targets", value: "5m ATR(14): stop = 1× ATR, T1 = 1.5× ATR, T2 = 2.5× ATR" },
+];
+
+const INTRADAY_FACTORS = [
+  {
+    name: "Market structure",
+    weight: "25%",
+    what: "Detects higher-high/higher-low (uptrend) or lower-high/lower-low (downtrend) on 15m bars.",
+    long: "HH + HL on 15m — bullish structure.",
+    short: "LH + LL on 15m — bearish structure.",
+  },
+  {
+    name: "VWAP",
+    weight: "20%",
+    what: "Volume-weighted average price for today's session — key institutional reference.",
+    long: "Price above VWAP — bullish intraday bias.",
+    short: "Price below VWAP — bearish intraday bias.",
+  },
+  {
+    name: "Relative volume (RVOL)",
+    weight: "15%",
+    what: "Current 5m bar volume vs 20-bar average.",
+    long: "RVOL ≥ 1.5× on an up bar — buying pressure.",
+    short: "RVOL ≥ 1.5× on a down bar — selling pressure.",
+  },
+  {
+    name: "EMA alignment (9 / 20 / 50)",
+    weight: "10%",
+    what: "Short-term EMA stack on 15m chart.",
+    long: "Price > EMA9 > EMA20 > EMA50 — bullish stack.",
+    short: "Price < EMA9 < EMA20 < EMA50 — bearish stack.",
+  },
+  {
+    name: "Opening range & gap",
+    weight: "10%",
+    what: "First 15 minutes high/low plus overnight gap vs prior close.",
+    long: "Gap up or price above opening-range high.",
+    short: "Gap down or price below opening-range low.",
+  },
+  {
+    name: "ATR volatility",
+    weight: "5%",
+    what: "Filters choppy or extreme volatility on 5m ATR(14).",
+    long: "Tradeable range — setup allowed.",
+    short: "Too quiet or too wild — trade blocked.",
+  },
+  {
+    name: "RSI exhaustion / divergence",
+    weight: "5%",
+    what: "RSI(14) on 5m — used for exhaustion and divergence, not as primary trigger.",
+    long: "Bullish divergence or oversold exhaustion.",
+    short: "Bearish divergence or overbought exhaustion.",
+  },
+  {
+    name: "Candlestick pattern",
+    weight: "5%",
+    what: "Hammer, engulfing, shooting star, marubozu on latest 5m bars.",
+    long: "Bullish hammer or engulfing.",
+    short: "Shooting star or bearish engulfing.",
+  },
+  {
+    name: "MACD confirmation",
+    weight: "5%",
+    what: "MACD histogram direction on 5m — confirmation only.",
+    long: "Histogram turning up.",
+    short: "Histogram turning down.",
+  },
+];
+
+const INTRADAY_SIGNALS = [
+  {
+    action: "LONG",
+    desc: "Weighted score ≥ +0.30 and confidence ≥ 35%. ATR filter must pass. Saved to intraday history.",
+  },
+  {
+    action: "SHORT",
+    desc: "Weighted score ≤ −0.30 and confidence ≥ 35%. Same ATR filter. Saved to intraday history.",
+  },
+  {
+    action: "HOLD",
+    desc: "Score or confidence below threshold, or ATR too low — no trade issued.",
+  },
+];
+
 export default function HelpPanel() {
   return (
     <div className="help-panel">
@@ -87,7 +178,9 @@ export default function HelpPanel() {
             the dashboard refreshes every <strong>30 seconds</strong>.
           </p>
           <p className="help-chart">
-            <strong>Dashboard</strong> — live signals, buy cards, stock table, and charts when you click a symbol.
+            <strong>Dashboard</strong> — swing trades (1–10 trading days), buy cards, charts.
+            <br />
+            <strong>Intraday</strong> — US same-day setups (VWAP, structure, RVOL); today&apos;s trades on top.
             <br />
             <strong>My Holdings</strong> — stocks you already own; sell/hold advice with price levels and P&amp;L vs your average cost.
             <br />
@@ -122,6 +215,85 @@ export default function HelpPanel() {
           On each stock&apos;s detail view, the <strong>market signal</strong> box explains{" "}
           <em>why</em> we say BUY, HOLD, or SELL, plus an expected upper/lower price range from
           Bollinger Bands and ATR.
+        </p>
+      </section>
+
+      <section className="help-section">
+        <h2>US Intraday — technology &amp; model</h2>
+        <p style={{ marginBottom: 12 }}>
+          The <strong>Intraday</strong> tab uses a <strong>separate engine</strong> from the swing dashboard.
+          It is tuned for US same-day trades only (no India intraday yet). Each trade card shows a{" "}
+          <strong>&quot;Why this trade&quot;</strong> section listing every factor, its weight, and whether
+          it is bullish, bearish, or neutral for that setup.
+        </p>
+        <table className="help-table help-tech-table">
+          <tbody>
+            {INTRADAY_TECH.map((row) => (
+              <tr key={row.label}>
+                <th>{row.label}</th>
+                <td>{row.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p style={{ marginTop: 16, marginBottom: 8 }}>
+          <strong>Not included yet</strong> (requires paid data or ML pipeline): footprint charts, volume profile,
+          Level II / order flow, Heikin Ashi execution layer, XGBoost/LSTM models.
+        </p>
+      </section>
+
+      <section className="help-section">
+        <h2>Intraday scoring factors</h2>
+        <p style={{ marginBottom: 12 }}>
+          Nine factors are weighted and summed into a single score. Daily trend (21 EMA) adds a small
+          ±0.05 bias. Actionable LONG/SHORT requires |score| ≥ 0.30 and confidence ≥ 35%.
+        </p>
+        <div className="help-grid">
+          {INTRADAY_FACTORS.map((f) => (
+            <article key={f.name} className="help-card help-card-intraday">
+              <div className="help-card-header">
+                <h3>{f.name}</h3>
+                <span className="help-weight">Weight: {f.weight}</span>
+              </div>
+              <p className="help-what">{f.what}</p>
+              <div className="help-signals">
+                <div>
+                  <span className="action-pill LONG">LONG</span>
+                  <span>{f.long}</span>
+                </div>
+                <div>
+                  <span className="action-pill SHORT">SHORT</span>
+                  <span>{f.short}</span>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="help-section">
+        <h2>Intraday signal meanings</h2>
+        <table className="help-table">
+          <thead>
+            <tr>
+              <th>Signal</th>
+              <th>Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            {INTRADAY_SIGNALS.map((s) => (
+              <tr key={s.action}>
+                <td>
+                  <span className={`action-pill ${s.action}`}>{s.action}</span>
+                </td>
+                <td>{s.desc}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p style={{ marginTop: 12 }}>
+          Intraday history and win-rate stats stay on the <strong>Intraday tab only</strong> — not mixed with
+          swing History. <strong>Today&apos;s trades</strong> appear at the top when a setup is found.
         </p>
       </section>
 

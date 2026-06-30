@@ -5,6 +5,7 @@ import AppFooter from "./components/AppFooter";
 import BrandMark from "./components/BrandMark";
 import HistoryPanel from "./components/HistoryPanel";
 import HoldingsPanel from "./components/HoldingsPanel";
+import IntradayPanel from "./components/IntradayPanel";
 import MarketTabs from "./components/MarketTabs";
 import MobileToolbar from "./components/MobileToolbar";
 import OpportunityPanel from "./components/OpportunityPanel";
@@ -13,7 +14,7 @@ import StockDetailView from "./components/StockDetail";
 import WishlistAdd from "./components/WishlistAdd";
 import ViewModeToggle, { getDefaultViewMode, saveViewMode, ViewMode } from "./components/ViewModeToggle";
 
-type Tab = "dashboard" | "holdings" | "history" | "help";
+type Tab = "dashboard" | "intraday" | "holdings" | "history" | "help";
 type MobilePanel = "wishlist" | "main";
 
 function sameSelection(a: StockSelection | null, b: StockSelection | null) {
@@ -323,6 +324,12 @@ export default function App() {
               Dashboard
             </button>
             <button
+              className={`main-tab ${activeTab === "intraday" ? "active" : ""}`}
+              onClick={() => openMobileTab("intraday")}
+            >
+              Intraday
+            </button>
+            <button
               className={`main-tab ${activeTab === "holdings" ? "active" : ""}`}
               onClick={() => openMobileTab("holdings")}
             >
@@ -346,7 +353,9 @@ export default function App() {
               ? "Indicator guide"
               : activeTab === "history"
                 ? "Trade signal history"
-                : activeTab === "holdings"
+                : activeTab === "intraday"
+                  ? "US intraday — VWAP & structure"
+                  : activeTab === "holdings"
                   ? "My holdings — sell / hold advice"
                   : selected
                     ? `${selected.symbol} — Chart & Analysis`
@@ -386,6 +395,8 @@ export default function App() {
           <HelpPanel />
         ) : activeTab === "history" ? (
           <HistoryPanel />
+        ) : activeTab === "intraday" ? (
+          <IntradayPanel />
         ) : activeTab === "holdings" ? (
           <HoldingsPanel
             market={activeMarket}
@@ -485,6 +496,14 @@ export default function App() {
             >
               <span className="mobile-nav-icon">📊</span>
               Dashboard
+            </button>
+            <button
+              type="button"
+              className={`mobile-nav-btn ${mobilePanel === "main" && activeTab === "intraday" ? "active" : ""}`}
+              onClick={() => openMobileTab("intraday")}
+            >
+              <span className="mobile-nav-icon">⚡</span>
+              Intraday
             </button>
             <button
               type="button"

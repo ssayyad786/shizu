@@ -306,7 +306,14 @@ def migrate_db() -> None:
 
 def init_db():
 
-    from app.models import HoldingItem, MarketTradeStats, SignalHistory, WishlistItem  # noqa: F401
+    from app.models import (  # noqa: F401
+        HoldingItem,
+        IntradaySignalHistory,
+        IntradayWatchlistItem,
+        MarketTradeStats,
+        SignalHistory,
+        WishlistItem,
+    )
 
 
 

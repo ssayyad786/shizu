@@ -40,10 +40,11 @@ interface Props {
   market: Market;
   onAdd: (symbol: string, market: Market, name?: string) => Promise<void>;
   onBulkComplete: (result: BulkAddResult) => Promise<void>;
+  bulkAdd?: (symbols: string[], market: Market) => Promise<BulkAddResult>;
   error?: string;
 }
 
-export default function WishlistAdd({ market, onAdd, onBulkComplete, error }: Props) {
+export default function WishlistAdd({ market, onAdd, onBulkComplete, bulkAdd, error }: Props) {
   const [text, setText] = useState("");
   const [localError, setLocalError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -133,7 +134,7 @@ export default function WishlistAdd({ market, onAdd, onBulkComplete, error }: Pr
 
     try {
       if (symbols.length > 1) {
-        const res = await api.bulkAddToWishlist(symbols, market);
+        const res = await (bulkAdd ?? api.bulkAddToWishlist)(symbols, market);
         setText("");
         setSummary(formatBulkSummary(res));
         await onBulkComplete(res);

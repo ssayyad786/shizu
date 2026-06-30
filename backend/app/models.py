@@ -76,3 +76,48 @@ class HoldingItem(Base):
     shares: Mapped[float | None] = mapped_column(Float, nullable=True)
     purchase_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class IntradayWatchlistItem(Base):
+    """US symbols watched for intraday setups."""
+
+    __tablename__ = "intraday_watchlist"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class IntradaySignalHistory(Base):
+    """Intraday trade ideas and outcomes — separate from swing history."""
+
+    __tablename__ = "intraday_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(20), index=True)
+    name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    direction: Mapped[str] = mapped_column(String(8))
+    entry_price: Mapped[float] = mapped_column(Float)
+    stop_loss: Mapped[float] = mapped_column(Float)
+    target_1: Mapped[float] = mapped_column(Float)
+    target_2: Mapped[float] = mapped_column(Float)
+    stop_pct: Mapped[float] = mapped_column(Float)
+    target_1_pct: Mapped[float] = mapped_column(Float)
+    target_2_pct: Mapped[float] = mapped_column(Float)
+    risk_reward: Mapped[float] = mapped_column(Float)
+    hold_minutes: Mapped[int] = mapped_column(default=60)
+    confidence: Mapped[float] = mapped_column(Float)
+    score: Mapped[float] = mapped_column(Float)
+    summary: Mapped[str] = mapped_column(Text)
+    reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    result_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    highest_since: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lowest_since: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_hit_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    trade_date: Mapped[datetime] = mapped_column(DateTime, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
