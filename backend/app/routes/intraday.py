@@ -28,6 +28,8 @@ from app.services.intraday_dataset import (
     dataset_to_csv,
     list_trade_dates,
 )
+from app.services.intraday_backtest import backtest_intraday
+from app.services.intraday_backtest import backtest_intraday
 from app.services.market import validate_market_symbol
 from app.services.search import resolve_symbol_name
 from app.services.us_market_hours import market_status_to_dict
@@ -269,3 +271,17 @@ def download_intraday_dataset(
         media_type="application/json; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/backtest")
+def run_intraday_backtest(
+    symbol: str,
+    date: str = Query(..., description="Trade date YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """Replay current intraday logic on historical bars for a symbol and date."""
+    sym = _us_symbol(symbol)
+    try:
+        return backtest_intraday(sym, date, db=db)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e

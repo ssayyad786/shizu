@@ -1,7 +1,7 @@
 """US intraday signal engine — VWAP, structure, volume, multi-timeframe."""
 
 from dataclasses import asdict, dataclass
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from enum import Enum
 from zoneinfo import ZoneInfo
 
@@ -10,6 +10,7 @@ import pandas as pd
 import ta
 
 US_EASTERN = ZoneInfo("America/New_York")
+SESSION_CLOSE = time(16, 0)
 INTRADAY_MIN_CONFIDENCE = 45.0
 INTRADAY_MIN_SCORE = 0.38
 STOP_ATR_MULT = 1.25
@@ -167,19 +168,19 @@ def build_trade_reasons(
     return headline, reasons, bullets
 
 
-def _session_bars(df: pd.DataFrame) -> pd.DataFrame:
+def _session_bars(df: pd.DataFrame, session_date: date | None = None) -> pd.DataFrame:
     if df.empty:
         return df
     work = df.copy()
     if getattr(work.index, "tz", None) is None:
         work.index = work.index.tz_localize("UTC")
     work.index = work.index.tz_convert(US_EASTERN)
-    today = datetime.now(US_EASTERN).date()
-    return work[work.index.date == today]
+    target = session_date or datetime.now(US_EASTERN).date()
+    return work[work.index.date == target]
 
 
-def _calc_vwap(df: pd.DataFrame) -> float | None:
-    session = _session_bars(df)
+def _calc_vwap(df: pd.DataFrame, session_date: date | None = None) -> float | None:
+    session = _session_bars(df, session_date)
     if session.empty or session["Volume"].sum() == 0:
         if df.empty:
             return None
@@ -259,14 +260,18 @@ def _ema_alignment_signal(df: pd.DataFrame) -> IndicatorSignal:
     return IndicatorSignal("EMA", v9, "NEUTRAL", 0.0, "EMAs mixed")
 
 
-def _opening_context_signal(df_5m: pd.DataFrame, df_1d: pd.DataFrame) -> IndicatorSignal:
+def _opening_context_signal(
+    df_5m: pd.DataFrame,
+    df_1d: pd.DataFrame,
+    session_date: date | None = None,
+) -> IndicatorSignal:
     if df_1d.empty or len(df_1d) < 2:
         return IndicatorSignal("Open/Gap", None, "NEUTRAL", 0.0, "No daily context")
     prev_close = float(df_1d["Close"].iloc[-2])
     today_open = float(df_1d["Open"].iloc[-1])
     gap_pct = (today_open - prev_close) / prev_close * 100 if prev_close else 0
 
-    session = _session_bars(df_5m)
+    session = _session_bars(df_5m, session_date)
     or_high = or_low = None
     if len(session) >= 3:
         opening = session.head(3)
@@ -381,18 +386,17 @@ def _daily_trend(df_1d: pd.DataFrame) -> str:
     return "neutral"
 
 
-def _market_close_today() -> datetime:
-    now_et = datetime.now(US_EASTERN)
-    close_et = datetime.combine(now_et.date(), time(16, 0), tzinfo=US_EASTERN)
-    if now_et >= close_et:
-        close_et += timedelta(days=1)
-        while close_et.weekday() >= 5:
-            close_et += timedelta(days=1)
+def _market_close_on(session_date: date) -> datetime:
+    close_et = datetime.combine(session_date, SESSION_CLOSE, tzinfo=US_EASTERN)
     return close_et.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
 
 
-def _too_late_for_entry() -> bool:
-    now_et = datetime.now(US_EASTERN)
+def _market_close_today() -> datetime:
+    return _market_close_on(datetime.now(US_EASTERN).date())
+
+
+def _too_late_for_entry(as_of_et: datetime | None = None) -> bool:
+    now_et = as_of_et or datetime.now(US_EASTERN)
     cutoff = datetime.combine(now_et.date(), ENTRY_CUTOFF_ET, tzinfo=US_EASTERN)
     return now_et >= cutoff
 
@@ -412,7 +416,13 @@ def _has_core_confluence(indicators: list[IndicatorSignal], want_long: bool) -> 
     return aligned >= MIN_CORE_CONFLUENCE
 
 
-def _build_trade_plan(direction: Direction, price: float, atr: float, score: float) -> IntradayTradePlan:
+def _build_trade_plan(
+    direction: Direction,
+    price: float,
+    atr: float,
+    score: float,
+    session_date: date | None = None,
+) -> IntradayTradePlan:
     min_stop_dist = price * MIN_STOP_PCT / 100
     stop_dist = max(atr * STOP_ATR_MULT, min_stop_dist)
     if direction == Direction.LONG:
@@ -431,6 +441,7 @@ def _build_trade_plan(direction: Direction, price: float, atr: float, score: flo
     if abs(score) >= 0.6:
         hold = 120
 
+    sd = session_date or datetime.now(US_EASTERN).date()
     return IntradayTradePlan(
         direction=direction.value,
         entry_price=round(price, 2),
@@ -442,7 +453,7 @@ def _build_trade_plan(direction: Direction, price: float, atr: float, score: flo
         target_2_pct=round(abs(t2 - price) / price * 100, 2),
         risk_reward=rr,
         hold_minutes=hold,
-        expires_at=_market_close_today().isoformat(),
+        expires_at=_market_close_on(sd).isoformat(),
     )
 
 
@@ -452,12 +463,21 @@ def trade_plan_to_dict(plan: IntradayTradePlan | None) -> dict | None:
     return asdict(plan)
 
 
-def analyze_intraday(symbol: str, df_5m: pd.DataFrame, df_15m: pd.DataFrame, df_1d: pd.DataFrame) -> IntradaySignal:
+def analyze_intraday(
+    symbol: str,
+    df_5m: pd.DataFrame,
+    df_15m: pd.DataFrame,
+    df_1d: pd.DataFrame,
+    as_of_et: datetime | None = None,
+) -> IntradaySignal:
     if len(df_5m) < 30:
         raise ValueError(f"Not enough 5m data for {symbol}")
 
+    as_of_et = as_of_et or datetime.now(US_EASTERN)
+    session_date = as_of_et.date()
+
     price = float(df_5m["Close"].iloc[-1])
-    vwap = _calc_vwap(df_5m)
+    vwap = _calc_vwap(df_5m, session_date)
     daily_trend = _daily_trend(df_1d)
 
     indicators = [
@@ -465,7 +485,7 @@ def analyze_intraday(symbol: str, df_5m: pd.DataFrame, df_15m: pd.DataFrame, df_
         _vwap_signal(price, vwap),
         _volume_signal(df_5m),
         _ema_alignment_signal(df_15m if len(df_15m) >= 50 else df_5m),
-        _opening_context_signal(df_5m, df_1d),
+        _opening_context_signal(df_5m, df_1d, session_date),
         _atr_volatility_signal(df_5m, price),
         _rsi_exhaustion_signal(df_5m),
         _candlestick_signal(df_5m),
@@ -501,7 +521,7 @@ def analyze_intraday(symbol: str, df_5m: pd.DataFrame, df_15m: pd.DataFrame, df_
 
     atr_ind = next((i for i in indicators if i.name == "ATR"), None)
     low_vol = bool(atr_ind and atr_ind.score < 0)
-    late_entry = _too_late_for_entry()
+    late_entry = _too_late_for_entry(as_of_et)
 
     long_ok = (
         score >= INTRADAY_MIN_SCORE
@@ -523,7 +543,7 @@ def analyze_intraday(symbol: str, df_5m: pd.DataFrame, df_15m: pd.DataFrame, df_
     if long_ok:
         direction = Direction.LONG
         actionable = True
-        plan = _build_trade_plan(Direction.LONG, price, atr_val, score)
+        plan = _build_trade_plan(Direction.LONG, price, atr_val, score, session_date)
         summary = (
             f"LONG — score {score:.2f}, {confidence:.0f}% confidence. "
             f"Entry {plan.entry_price}, T1 {plan.target_1} (+{plan.target_1_pct}%), "
@@ -532,7 +552,7 @@ def analyze_intraday(symbol: str, df_5m: pd.DataFrame, df_15m: pd.DataFrame, df_
     elif short_ok:
         direction = Direction.SHORT
         actionable = True
-        plan = _build_trade_plan(Direction.SHORT, price, atr_val, score)
+        plan = _build_trade_plan(Direction.SHORT, price, atr_val, score, session_date)
         summary = (
             f"SHORT — score {score:.2f}, {confidence:.0f}% confidence. "
             f"Entry {plan.entry_price}, T1 {plan.target_1} ({plan.target_1_pct}%), "

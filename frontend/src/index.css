@@ -2066,6 +2066,70 @@ input {
   font-size: 0.78rem;
 }
 
+.intraday-backtest-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.intraday-replay-btn {
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
+.intraday-backtest-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.intraday-backtest-outcome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.intraday-backtest-badge {
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.intraday-backtest-badge.win {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.intraday-backtest-badge.loss {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.intraday-backtest-meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.intraday-backtest-no-trade {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.intraday-backtest-recorded {
+  font-size: 0.82rem;
+  color: var(--muted);
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
 .intraday-section-header {
   display: flex;
   flex-wrap: wrap;

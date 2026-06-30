@@ -12,6 +12,7 @@ import WishlistAdd from "./WishlistAdd";
 import WhyTradeBlock from "./WhyTradeBlock";
 import IntradayReportDownload from "./IntradayReportDownload";
 import IntradayDatasetExport from "./IntradayDatasetExport";
+import IntradayBacktestPanel from "./IntradayBacktestPanel";
 
 function fmt(n: number) {
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -323,6 +324,7 @@ export default function IntradayPanel() {
 
       <IntradayReportDownload onError={setError} />
       <IntradayDatasetExport onError={setError} />
+      <IntradayBacktestPanel watchlistSymbols={watchlist.map((w) => w.symbol)} onError={setError} />
 
       <div className="intraday-toolbar">
         <p className="intraday-intro">

@@ -189,6 +189,44 @@ export interface IntradayTradeDate {
   closed: number;
 }
 
+export interface IntradayBacktestOutcome {
+  status: string;
+  exit_price: number;
+  result_pct: number;
+  success: boolean;
+  closed_at: string | null;
+  mfe_pct: number;
+  mae_pct: number;
+}
+
+export interface IntradayBacktestResult {
+  symbol: string;
+  date: string;
+  traded: boolean;
+  scans_run: number;
+  session_bars?: number;
+  entry_time_et?: string;
+  message?: string;
+  signal?: IntradayLiveSignal & { entry_time_et?: string };
+  trade_plan?: IntradayTradePlan & {
+    stop_pct: number;
+    target_1_pct: number;
+    target_2_pct: number;
+    risk_reward: number;
+    hold_minutes: number;
+  };
+  outcome?: IntradayBacktestOutcome;
+  recorded_trade?: IntradayHistoryRecord | null;
+  scan_log?: Array<{
+    time_et: string;
+    actionable: boolean;
+    direction: string;
+    score: number;
+    confidence: number;
+    summary: string;
+  }>;
+}
+
 export interface IntradayHistoryPage {
   signals: IntradayHistoryRecord[];
   today_trades: IntradayHistoryRecord[];
@@ -555,5 +593,9 @@ export const api = {
     if (opts?.split != null) params.set("split", opts.split ? "true" : "false");
     const ext = opts?.format ?? "json";
     return downloadFile(`/intraday/dataset?${params}`, `shizu_intraday_dataset.${ext}`);
+  },
+  runIntradayBacktest: (symbol: string, date: string) => {
+    const params = new URLSearchParams({ symbol: symbol.toUpperCase(), date });
+    return request<IntradayBacktestResult>(`/intraday/backtest?${params}`);
   },
 };

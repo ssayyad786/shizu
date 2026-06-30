@@ -82,6 +82,7 @@ const INTRADAY_TECH = [
   { label: "Session", value: "US Eastern (America/New_York); scans pause when market is closed; trades expire at 4:00 PM ET" },
   { label: "Algo report", value: "Download report (JSON/CSV) on the Intraday tab — full trade history, factor breakdown, and tuning insights" },
   { label: "Train / test export", value: "Pick date range → Export train/test JSON or CSV with factor features and win labels for model experiments" },
+  { label: "Replay backtest", value: "Pick any symbol + date → Reruns current rules on Yahoo history; shows entry/stop/targets and simulated hit or fail" },
   { label: "Engine", value: "Rule-based weighted scorer (not ML) — Python + pandas + ta library" },
   { label: "Stops & targets", value: "5m ATR(14): stop = 1.25× ATR (min 0.30%), T1 = 1.5× stop distance, T2 = 2.5×" },
 ];
