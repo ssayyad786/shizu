@@ -5,6 +5,7 @@ import {
   IntradayLiveSignal,
   IntradayStats,
   IntradayWatchlistItem,
+  Market,
 } from "../api";
 import WishlistAdd from "./WishlistAdd";
 import WhyTradeBlock from "./WhyTradeBlock";
@@ -157,7 +158,7 @@ export default function IntradayPanel() {
     return () => clearInterval(interval);
   }, [refresh]);
 
-  const handleAdd = async (symbol: string, _market: "US", name?: string) => {
+  const handleAdd = async (symbol: string, _market: Market, name?: string) => {
     await api.addIntradaySymbol(symbol, name);
     await api.triggerIntradayScan();
     await refresh(true);
