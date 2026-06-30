@@ -6,12 +6,66 @@ import {
   IntradayStats,
   IntradayWatchlistItem,
   Market,
+  UsMarketStatus,
 } from "../api";
 import WishlistAdd from "./WishlistAdd";
 import WhyTradeBlock from "./WhyTradeBlock";
 
 function fmt(n: number) {
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function useCountdown(targetIso: string | null | undefined): number | null {
+  const [remaining, setRemaining] = useState<number | null>(null);
+  useEffect(() => {
+    if (!targetIso) {
+      setRemaining(null);
+      return;
+    }
+    const update = () => {
+      const ms = new Date(targetIso).getTime() - Date.now();
+      setRemaining(Math.max(0, Math.floor(ms / 1000)));
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [targetIso]);
+  return remaining;
+}
+
+function UsMarketBanner({ market }: { market: UsMarketStatus }) {
+  const countdownTarget = market.is_open ? market.session_close_at : market.next_session_open_at;
+  const remaining = useCountdown(countdownTarget);
+  const countdown =
+    remaining != null ? formatCountdown(remaining) : market.is_open ? "—" : null;
+
+  return (
+    <div className={`us-market-banner ${market.is_open ? "us-market-open" : "us-market-closed"}`}>
+      <div className="us-market-banner-main">
+        <span className="us-market-dot" aria-hidden />
+        <strong>{market.is_open ? "US market open" : "US market closed"}</strong>
+        <span className="us-market-hours">
+          Regular session {market.open_time}–{market.close_time} ET
+        </span>
+      </div>
+      {countdown != null && (
+        <span className="us-market-countdown">
+          {market.is_open ? "Closes in " : "Opens in "}
+          <strong>{countdown}</strong>
+        </span>
+      )}
+      {!market.is_open && <p className="us-market-note">{market.message}</p>}
+    </div>
+  );
 }
 
 function statusLabel(record: IntradayHistoryRecord) {
@@ -188,6 +242,7 @@ export default function IntradayPanel() {
   const [todayTrades, setTodayTrades] = useState<IntradayHistoryRecord[]>([]);
   const [history, setHistory] = useState<IntradayHistoryRecord[]>([]);
   const [stats, setStats] = useState<IntradayStats | null>(null);
+  const [market, setMarket] = useState<UsMarketStatus | null>(null);
   const [lastScan, setLastScan] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
@@ -208,6 +263,7 @@ export default function IntradayPanel() {
       setTodayTrades(hist.today_trades);
       setHistory(hist.signals);
       setStats(hist.stats);
+      setMarket(sig.market ?? hist.market ?? null);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load intraday data");
@@ -224,13 +280,17 @@ export default function IntradayPanel() {
 
   const handleAdd = async (symbol: string, _market: Market, name?: string) => {
     await api.addIntradaySymbol(symbol, name);
-    await api.triggerIntradayScan();
+    if (market?.is_open) {
+      await api.triggerIntradayScan();
+    }
     await refresh(true);
   };
 
   const handleBulkComplete = async (result: import("../api").BulkAddResult) => {
     if (result.added.length > 0) {
-      await api.triggerIntradayScan();
+      if (market?.is_open) {
+        await api.triggerIntradayScan();
+      }
       await refresh(true);
     }
   };
@@ -241,6 +301,7 @@ export default function IntradayPanel() {
   };
 
   const handleScan = async () => {
+    if (!market?.is_open) return;
     setScanning(true);
     try {
       await api.triggerIntradayScan();
@@ -250,18 +311,32 @@ export default function IntradayPanel() {
     }
   };
 
+  const marketOpen = market?.is_open ?? false;
+
   const openTodayTrades = todayTrades.filter((t) => t.status === "open");
 
   return (
     <div className="intraday-panel">
+      {market && <UsMarketBanner market={market} />}
+
       <div className="intraday-toolbar">
         <p className="intraday-intro">
           US intraday model — VWAP, market structure, RVOL, EMA stack, opening range &amp; gap.
-          Scans every <strong>2 minutes</strong>. Click a symbol to expand trade details.
+          {marketOpen ? (
+            <> Scans every <strong>2 minutes</strong> while the market is open.</>
+          ) : (
+            <> Scans run only during US regular hours (9:30 AM–4:00 PM ET).</>
+          )}{" "}
+          Click a symbol to expand trade details.
         </p>
         <div className="intraday-toolbar-actions">
           {lastScan && <span className="scan-info">Last scan: {new Date(lastScan).toLocaleString()}</span>}
-          <button className="btn btn-ghost" onClick={handleScan} disabled={scanning}>
+          <button
+            className="btn btn-ghost"
+            onClick={handleScan}
+            disabled={scanning || !marketOpen}
+            title={marketOpen ? undefined : "US market is closed"}
+          >
             {scanning ? "Scanning…" : "Scan now"}
           </button>
         </div>

@@ -1873,6 +1873,68 @@ input {
 }
 
 /* Intraday tab */
+.us-market-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.us-market-banner.us-market-open {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.us-market-banner.us-market-closed {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.us-market-banner-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.us-market-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.us-market-open .us-market-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+}
+
+.us-market-hours {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.us-market-countdown {
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.us-market-countdown strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.us-market-note {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
 .intraday-panel {
   display: flex;
   flex-direction: column;

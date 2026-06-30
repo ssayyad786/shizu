@@ -10,6 +10,7 @@ from app.models import IntradayWatchlistItem
 from app.services.intraday_history import save_intraday_signal, signal_to_api_dict, update_open_intraday
 from app.services.intraday_signals import analyze_intraday
 from app.services.market_data import fetch_history
+from app.services.us_market_hours import get_us_market_status
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ def scan_intraday_symbol(symbol: str, db: Session | None = None) -> dict:
 def scan_intraday_watchlist(db: Session | None = None) -> list[dict]:
     global _last_intraday_scan
 
+    market = get_us_market_status()
     close_db = False
     if db is None:
         db = SessionLocal()
@@ -61,6 +63,11 @@ def scan_intraday_watchlist(db: Session | None = None) -> list[dict]:
 
     try:
         update_open_intraday(db)
+
+        if not market["is_open"]:
+            logger.info("US market closed (%s) — skipping intraday symbol scan", market["status_label"])
+            return []
+
         items = db.query(IntradayWatchlistItem).order_by(IntradayWatchlistItem.symbol).all()
         valid = {i.symbol.upper() for i in items}
         for key in list(_intraday_signals.keys()):

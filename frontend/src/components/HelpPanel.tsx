@@ -78,8 +78,8 @@ const INTRADAY_TECH = [
   { label: "Data source", value: "Yahoo Finance via yfinance (free delayed quotes — not Level II)" },
   { label: "Chart type", value: "OHLC candlesticks on 5m and 15m bars" },
   { label: "Timeframes", value: "Daily (trend) · 15m (intraday trend) · 5m (entry & signals)" },
-  { label: "Scan frequency", value: "Every 2 minutes for symbols on your intraday watchlist" },
-  { label: "Session", value: "US Eastern (America/New_York); trades expire at market close (4:00 PM ET)" },
+  { label: "Scan frequency", value: "Every 2 minutes while US market is open (9:30 AM–4:00 PM ET, Mon–Fri)" },
+  { label: "Session", value: "US Eastern (America/New_York); scans pause when market is closed; trades expire at 4:00 PM ET" },
   { label: "Engine", value: "Rule-based weighted scorer (not ML) — Python + pandas + ta library" },
   { label: "Stops & targets", value: "5m ATR(14): stop = 1× ATR, T1 = 1.5× ATR, T2 = 2.5× ATR" },
 ];

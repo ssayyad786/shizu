@@ -21,6 +21,7 @@ from app.services.intraday_monitor import (
 )
 from app.services.market import validate_market_symbol
 from app.services.search import resolve_symbol_name
+from app.services.us_market_hours import market_status_to_dict
 
 router = APIRouter(prefix="/api/intraday", tags=["intraday"])
 
@@ -128,6 +129,11 @@ def remove_intraday_symbol(symbol: str, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+@router.get("/market-status")
+def get_market_status():
+    return market_status_to_dict()
+
+
 @router.get("/signals")
 def get_intraday_signals():
     signals, last_scan = get_cached_intraday_signals()
@@ -136,14 +142,32 @@ def get_intraday_signals():
         "signals": signals,
         "today_setups": today_setups,
         "last_scan": last_scan.isoformat() if last_scan else None,
+        "market": market_status_to_dict(),
     }
 
 
 @router.post("/scan")
 def trigger_intraday_scan():
+    market = market_status_to_dict()
+    if not market["is_open"]:
+        signals, last_scan = get_cached_intraday_signals()
+        return {
+            "scanned": 0,
+            "skipped": True,
+            "market": market,
+            "today_setups": [s for s in signals if s.get("actionable")],
+            "signals": signals,
+            "last_scan": last_scan.isoformat() if last_scan else None,
+        }
     results = scan_intraday_watchlist()
     today_setups = [s for s in results if s.get("actionable")]
-    return {"scanned": len(results), "today_setups": today_setups, "signals": results}
+    return {
+        "scanned": len(results),
+        "skipped": False,
+        "market": market_status_to_dict(),
+        "today_setups": today_setups,
+        "signals": results,
+    }
 
 
 @router.get("/history")
@@ -162,6 +186,7 @@ def get_intraday_history(
         "signals": records,
         "today_trades": today_trades,
         "stats": stats,
+        "market": market_status_to_dict(),
         "total": total,
         "limit": limit,
         "offset": offset,

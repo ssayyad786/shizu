@@ -169,10 +169,25 @@ export interface IntradayStats {
   today_win_rate: number;
 }
 
+export interface UsMarketStatus {
+  is_open: boolean;
+  timezone: string;
+  open_time: string;
+  close_time: string;
+  session_open_at: string | null;
+  session_close_at: string | null;
+  next_session_open_at: string | null;
+  seconds_to_close: number | null;
+  seconds_to_open: number | null;
+  status_label: string;
+  message: string;
+}
+
 export interface IntradayHistoryPage {
   signals: IntradayHistoryRecord[];
   today_trades: IntradayHistoryRecord[];
   stats: IntradayStats;
+  market?: UsMarketStatus;
   total: number;
   limit: number;
   offset: number;
@@ -476,12 +491,17 @@ export const api = {
       signals: IntradayLiveSignal[];
       today_setups: IntradayLiveSignal[];
       last_scan: string | null;
+      market: UsMarketStatus;
     }>("/intraday/signals"),
+  getIntradayMarketStatus: () => request<UsMarketStatus>("/intraday/market-status"),
   triggerIntradayScan: () =>
-    request<{ scanned: number; today_setups: IntradayLiveSignal[]; signals: IntradayLiveSignal[] }>(
-      "/intraday/scan",
-      { method: "POST" }
-    ),
+    request<{
+      scanned: number;
+      skipped?: boolean;
+      today_setups: IntradayLiveSignal[];
+      signals: IntradayLiveSignal[];
+      market: UsMarketStatus;
+    }>("/intraday/scan", { method: "POST" }),
   getIntradayHistory: (opts?: { limit?: number; offset?: number; refresh?: boolean }) => {
     const params = new URLSearchParams();
     if (opts?.limit != null) params.set("limit", String(opts.limit));
