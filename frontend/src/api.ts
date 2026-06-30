@@ -183,6 +183,12 @@ export interface UsMarketStatus {
   message: string;
 }
 
+export interface IntradayTradeDate {
+  date: string;
+  trades: number;
+  closed: number;
+}
+
 export interface IntradayHistoryPage {
   signals: IntradayHistoryRecord[];
   today_trades: IntradayHistoryRecord[];
@@ -532,4 +538,22 @@ export const api = {
   },
   downloadIntradayReport: (format: IntradayReportFormat = "json") =>
     downloadFile(`/intraday/report?format=${format}`, `shizu_intraday_report.${format}`),
+  getIntradayTradeDates: () =>
+    request<{ dates: IntradayTradeDate[] }>("/intraday/trade-dates"),
+  downloadIntradayDataset: (opts?: {
+    format?: IntradayReportFormat;
+    fromDate?: string;
+    toDate?: string;
+    trainRatio?: number;
+    split?: boolean;
+  }) => {
+    const params = new URLSearchParams();
+    params.set("format", opts?.format ?? "json");
+    if (opts?.fromDate) params.set("from_date", opts.fromDate);
+    if (opts?.toDate) params.set("to_date", opts.toDate);
+    if (opts?.trainRatio != null) params.set("train_ratio", String(opts.trainRatio));
+    if (opts?.split != null) params.set("split", opts.split ? "true" : "false");
+    const ext = opts?.format ?? "json";
+    return downloadFile(`/intraday/dataset?${params}`, `shizu_intraday_dataset.${ext}`);
+  },
 };

@@ -1974,6 +1974,98 @@ input {
   flex-shrink: 0;
 }
 
+.intraday-dataset-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.intraday-dataset-header span {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.intraday-dataset-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: flex-end;
+}
+
+.intraday-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.intraday-date-field input[type="date"],
+.intraday-date-field input[type="number"] {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.intraday-split-field input {
+  width: 72px;
+}
+
+.intraday-checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  padding-bottom: 8px;
+}
+
+.intraday-date-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.intraday-date-chips-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.intraday-date-chip {
+  padding: 4px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.intraday-date-chip.active {
+  border-color: rgba(16, 185, 129, 0.5);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.intraday-dataset-meta {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.intraday-dataset-meta code {
+  font-size: 0.78rem;
+}
+
 .intraday-section-header {
   display: flex;
   flex-wrap: wrap;

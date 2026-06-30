@@ -22,6 +22,12 @@ from app.services.intraday_monitor import (
     scan_intraday_watchlist,
 )
 from app.services.intraday_report import build_intraday_report, report_filename, report_to_csv
+from app.services.intraday_dataset import (
+    build_intraday_dataset,
+    dataset_filename,
+    dataset_to_csv,
+    list_trade_dates,
+)
 from app.services.market import validate_market_symbol
 from app.services.search import resolve_symbol_name
 from app.services.us_market_hours import market_status_to_dict
@@ -213,6 +219,51 @@ def download_intraday_report(
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     body = json.dumps(report, indent=2, default=str)
+    return Response(
+        content=body,
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/trade-dates")
+def get_intraday_trade_dates(db: Session = Depends(get_db)):
+    """Dates that have intraday trade history (for date picker)."""
+    return {"dates": list_trade_dates(db)}
+
+
+@router.get("/dataset")
+def download_intraday_dataset(
+    format: str = Query("json", pattern="^(json|csv)$"),
+    from_date: str | None = Query(None, description="Start date YYYY-MM-DD (inclusive)"),
+    to_date: str | None = Query(None, description="End date YYYY-MM-DD (inclusive)"),
+    train_ratio: float = Query(0.8, ge=0.5, le=0.95),
+    split: bool = Query(True, description="Split closed trades into train/test sets"),
+    db: Session = Depends(get_db),
+):
+    """Download ML train/test dataset from historical intraday trades."""
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(400, "from_date must be on or before to_date")
+
+    dataset = build_intraday_dataset(
+        db,
+        from_date=from_date,
+        to_date=to_date,
+        train_ratio=train_ratio,
+        include_split=split,
+    )
+    if dataset["date_range"]["trades_in_range"] == 0:
+        raise HTTPException(404, "No intraday trades found for the selected date range")
+
+    filename = dataset_filename(format, from_date, to_date)
+    if format == "csv":
+        body = dataset_to_csv(dataset)
+        return Response(
+            content=body,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    body = json.dumps(dataset, indent=2, default=str)
     return Response(
         content=body,
         media_type="application/json; charset=utf-8",

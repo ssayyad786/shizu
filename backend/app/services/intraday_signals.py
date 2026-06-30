@@ -10,8 +10,12 @@ import pandas as pd
 import ta
 
 US_EASTERN = ZoneInfo("America/New_York")
-INTRADAY_MIN_CONFIDENCE = 35.0
-INTRADAY_MIN_SCORE = 0.30
+INTRADAY_MIN_CONFIDENCE = 45.0
+INTRADAY_MIN_SCORE = 0.38
+STOP_ATR_MULT = 1.25
+MIN_STOP_PCT = 0.30
+ENTRY_CUTOFF_ET = time(15, 0)  # no new trades after 3:00 PM ET
+MIN_CORE_CONFLUENCE = 3  # of Structure, VWAP, EMA, RVOL must align
 
 WEIGHTS = {
     "market_structure": 0.25,
@@ -213,9 +217,9 @@ def _swing_structure(df: pd.DataFrame, lookback: int = 30) -> IndicatorSignal:
     if h2 < h1 and l2 < l1:
         return IndicatorSignal("Structure", h2 - l2, "SELL", -0.85, "Lower high + lower low — downtrend")
     if h2 > h1 and l2 <= l1:
-        return IndicatorSignal("Structure", h2 - l2, "BUY", 0.35, "Higher high — mixed structure")
+        return IndicatorSignal("Structure", h2 - l2, "NEUTRAL", 0.0, "Higher high only — mixed structure (no trade)")
     if h2 < h1 and l2 >= l1:
-        return IndicatorSignal("Structure", h2 - l2, "SELL", -0.35, "Lower high — mixed structure")
+        return IndicatorSignal("Structure", h2 - l2, "NEUTRAL", 0.0, "Lower high only — mixed structure (no trade)")
     return IndicatorSignal("Structure", h2 - l2, "NEUTRAL", 0.0, "Choppy / range-bound structure")
 
 
@@ -387,16 +391,38 @@ def _market_close_today() -> datetime:
     return close_et.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
 
 
+def _too_late_for_entry() -> bool:
+    now_et = datetime.now(US_EASTERN)
+    cutoff = datetime.combine(now_et.date(), ENTRY_CUTOFF_ET, tzinfo=US_EASTERN)
+    return now_et >= cutoff
+
+
+def _factor_aligns_direction(ind: IndicatorSignal, want_long: bool) -> bool:
+    if want_long:
+        return ind.score >= 0.15
+    return ind.score <= -0.15
+
+
+def _has_core_confluence(indicators: list[IndicatorSignal], want_long: bool) -> bool:
+    core = {"Structure", "VWAP", "EMA", "RVOL"}
+    aligned = sum(
+        1 for ind in indicators
+        if ind.name in core and _factor_aligns_direction(ind, want_long)
+    )
+    return aligned >= MIN_CORE_CONFLUENCE
+
+
 def _build_trade_plan(direction: Direction, price: float, atr: float, score: float) -> IntradayTradePlan:
-    atr = max(atr, price * 0.001)
+    min_stop_dist = price * MIN_STOP_PCT / 100
+    stop_dist = max(atr * STOP_ATR_MULT, min_stop_dist)
     if direction == Direction.LONG:
-        stop = round(price - atr, 2)
-        t1 = round(price + atr * 1.5, 2)
-        t2 = round(price + atr * 2.5, 2)
+        stop = round(price - stop_dist, 2)
+        t1 = round(price + stop_dist * 1.5, 2)
+        t2 = round(price + stop_dist * 2.5, 2)
     else:
-        stop = round(price + atr, 2)
-        t1 = round(price - atr * 1.5, 2)
-        t2 = round(price - atr * 2.5, 2)
+        stop = round(price + stop_dist, 2)
+        t1 = round(price - stop_dist * 1.5, 2)
+        t2 = round(price - stop_dist * 2.5, 2)
 
     risk = abs(price - stop)
     reward = abs(t1 - price)
@@ -475,8 +501,26 @@ def analyze_intraday(symbol: str, df_5m: pd.DataFrame, df_15m: pd.DataFrame, df_
 
     atr_ind = next((i for i in indicators if i.name == "ATR"), None)
     low_vol = bool(atr_ind and atr_ind.score < 0)
+    late_entry = _too_late_for_entry()
 
-    if score >= INTRADAY_MIN_SCORE and confidence >= INTRADAY_MIN_CONFIDENCE and not low_vol:
+    long_ok = (
+        score >= INTRADAY_MIN_SCORE
+        and confidence >= INTRADAY_MIN_CONFIDENCE
+        and not low_vol
+        and not late_entry
+        and daily_trend != "bearish"
+        and _has_core_confluence(indicators, want_long=True)
+    )
+    short_ok = (
+        score <= -INTRADAY_MIN_SCORE
+        and confidence >= INTRADAY_MIN_CONFIDENCE
+        and not low_vol
+        and not late_entry
+        and daily_trend != "bullish"
+        and _has_core_confluence(indicators, want_long=False)
+    )
+
+    if long_ok:
         direction = Direction.LONG
         actionable = True
         plan = _build_trade_plan(Direction.LONG, price, atr_val, score)
@@ -485,7 +529,7 @@ def analyze_intraday(symbol: str, df_5m: pd.DataFrame, df_15m: pd.DataFrame, df_
             f"Entry {plan.entry_price}, T1 {plan.target_1} (+{plan.target_1_pct}%), "
             f"stop {plan.stop_loss} (−{plan.stop_pct}%), ~{plan.hold_minutes} min hold."
         )
-    elif score <= -INTRADAY_MIN_SCORE and confidence >= INTRADAY_MIN_CONFIDENCE and not low_vol:
+    elif short_ok:
         direction = Direction.SHORT
         actionable = True
         plan = _build_trade_plan(Direction.SHORT, price, atr_val, score)
@@ -493,6 +537,17 @@ def analyze_intraday(symbol: str, df_5m: pd.DataFrame, df_15m: pd.DataFrame, df_
             f"SHORT — score {score:.2f}, {confidence:.0f}% confidence. "
             f"Entry {plan.entry_price}, T1 {plan.target_1} ({plan.target_1_pct}%), "
             f"stop {plan.stop_loss}, ~{plan.hold_minutes} min hold."
+        )
+    elif late_entry:
+        summary = "No new intraday entries after 3:00 PM ET — not enough time to reach targets."
+    elif daily_trend == "bearish" and score >= INTRADAY_MIN_SCORE:
+        summary = "Long setup blocked — daily trend is bearish (trade with the higher timeframe)."
+    elif daily_trend == "bullish" and score <= -INTRADAY_MIN_SCORE:
+        summary = "Short setup blocked — daily trend is bullish (trade with the higher timeframe)."
+    elif score >= INTRADAY_MIN_SCORE or score <= -INTRADAY_MIN_SCORE:
+        summary = (
+            "Score reached threshold but core factors lack confluence — "
+            "need 3+ of structure, VWAP, EMA, and RVOL aligned."
         )
     else:
         summary = "No high-probability intraday setup — wait for VWAP + structure alignment."

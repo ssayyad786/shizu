@@ -81,8 +81,9 @@ const INTRADAY_TECH = [
   { label: "Scan frequency", value: "Every 2 minutes while US market is open (9:30 AM–4:00 PM ET, Mon–Fri)" },
   { label: "Session", value: "US Eastern (America/New_York); scans pause when market is closed; trades expire at 4:00 PM ET" },
   { label: "Algo report", value: "Download report (JSON/CSV) on the Intraday tab — full trade history, factor breakdown, and tuning insights" },
+  { label: "Train / test export", value: "Pick date range → Export train/test JSON or CSV with factor features and win labels for model experiments" },
   { label: "Engine", value: "Rule-based weighted scorer (not ML) — Python + pandas + ta library" },
-  { label: "Stops & targets", value: "5m ATR(14): stop = 1× ATR, T1 = 1.5× ATR, T2 = 2.5× ATR" },
+  { label: "Stops & targets", value: "5m ATR(14): stop = 1.25× ATR (min 0.30%), T1 = 1.5× stop distance, T2 = 2.5×" },
 ];
 
 const INTRADAY_FACTORS = [
@@ -154,11 +155,11 @@ const INTRADAY_FACTORS = [
 const INTRADAY_SIGNALS = [
   {
     action: "LONG",
-    desc: "Weighted score ≥ +0.30 and confidence ≥ 35%. ATR filter must pass. Saved to intraday history.",
+    desc: "Weighted score ≥ +0.38, confidence ≥ 45%, 3+ core factors aligned (structure/VWAP/EMA/RVOL), daily trend not bearish. One trade per symbol per day.",
   },
   {
     action: "SHORT",
-    desc: "Weighted score ≤ −0.30 and confidence ≥ 35%. Same ATR filter. Saved to intraday history.",
+    desc: "Weighted score ≤ −0.38, confidence ≥ 45%, 3+ core factors aligned, daily trend not bullish. No entries after 3:00 PM ET.",
   },
   {
     action: "HOLD",
@@ -247,7 +248,7 @@ export default function HelpPanel() {
         <h2>Intraday scoring factors</h2>
         <p style={{ marginBottom: 12 }}>
           Nine factors are weighted and summed into a single score. Daily trend (21 EMA) adds a small
-          ±0.05 bias. Actionable LONG/SHORT requires |score| ≥ 0.30 and confidence ≥ 35%.
+          ±0.05 bias. Actionable LONG/SHORT requires |score| ≥ 0.38, confidence ≥ 45%, and 3+ aligned core factors.
         </p>
         <div className="help-grid">
           {INTRADAY_FACTORS.map((f) => (
@@ -338,7 +339,7 @@ export default function HelpPanel() {
           <p className="help-what">
             <strong>Buy at:</strong> last close when the signal fires.<br />
             <strong>Sell target:</strong> entry + 1.5× ATR (BUY) or 2× ATR (STRONG BUY).<br />
-            <strong>Stop loss:</strong> entry − 1× ATR.<br />
+            <strong>Stop loss:</strong> entry − 1.25× ATR (minimum 0.30% from entry).<br />
             <strong>Hold period:</strong> Shizu estimates how many <strong>trading days</strong> (Mon–Fri,
             not calendar days) price needs to reach the target — based on recent up-day pace and ATR.
             The window is <strong>1–10 trading days</strong> and shown on each buy card (e.g. &quot;~4 trading days&quot;).

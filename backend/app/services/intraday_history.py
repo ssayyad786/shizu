@@ -39,11 +39,11 @@ def save_intraday_signal(db: Session, signal: IntradaySignal) -> IntradaySignalH
 
     symbol = signal.symbol.upper()
     trade_date = _today_utc_date()
+    # One trade idea per symbol per day — prevents re-entry churn after stops.
     existing = (
         db.query(IntradaySignalHistory)
         .filter(
             IntradaySignalHistory.symbol == symbol,
-            IntradaySignalHistory.status == "open",
             IntradaySignalHistory.trade_date >= trade_date,
         )
         .first()

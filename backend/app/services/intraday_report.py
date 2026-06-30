@@ -17,7 +17,7 @@ from app.services.intraday_history import (
     intraday_to_dict,
 )
 from app.services.intraday_monitor import get_cached_intraday_signals
-from app.services.intraday_signals import WEIGHTS
+from app.services.intraday_signals import INTRADAY_MIN_CONFIDENCE, INTRADAY_MIN_SCORE, WEIGHTS
 from app.services.us_market_hours import market_status_to_dict
 from app.version import __version__
 
@@ -300,8 +300,8 @@ def build_intraday_report(db: Session) -> dict:
         "market": market_status_to_dict(),
         "model": {
             "name": "US intraday weighted scorer",
-            "min_confidence": 35.0,
-            "min_score": 0.30,
+            "min_confidence": INTRADAY_MIN_CONFIDENCE,
+            "min_score": INTRADAY_MIN_SCORE,
             "factor_weights": WEIGHTS,
             "scan_interval_minutes": 2,
             "session": "US regular 9:30-16:00 ET",

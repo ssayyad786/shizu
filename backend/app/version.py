@@ -1,3 +1,3 @@
 """Application version — bump when releasing an update."""
 
-__version__ = "1.5.5"
+__version__ = "1.5.7"
