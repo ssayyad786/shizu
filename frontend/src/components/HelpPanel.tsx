@@ -80,6 +80,7 @@ const INTRADAY_TECH = [
   { label: "Timeframes", value: "Daily (trend) · 15m (intraday trend) · 5m (entry & signals)" },
   { label: "Scan frequency", value: "Every 2 minutes while US market is open (9:30 AM–4:00 PM ET, Mon–Fri)" },
   { label: "Session", value: "US Eastern (America/New_York); scans pause when market is closed; trades expire at 4:00 PM ET" },
+  { label: "Algo report", value: "Download report (JSON/CSV) on the Intraday tab — full trade history, factor breakdown, and tuning insights" },
   { label: "Engine", value: "Rule-based weighted scorer (not ML) — Python + pandas + ta library" },
   { label: "Stops & targets", value: "5m ATR(14): stop = 1× ATR, T1 = 1.5× ATR, T2 = 2.5× ATR" },
 ];

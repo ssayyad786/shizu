@@ -380,6 +380,26 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export type IntradayReportFormat = "json" | "csv";
+
+async function downloadFile(path: string, fallbackName: string): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, { cache: "no-store" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(typeof err.detail === "string" ? err.detail : res.statusText);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="?([^";]+)"?/);
+  const filename = match?.[1] || fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export type StockSelection = { symbol: string; market: Market };
 
 export function currencyForMarket(market: Market): string {
@@ -510,4 +530,6 @@ export const api = {
     const qs = params.toString();
     return request<IntradayHistoryPage>(`/intraday/history${qs ? `?${qs}` : ""}`);
   },
+  downloadIntradayReport: (format: IntradayReportFormat = "json") =>
+    downloadFile(`/intraday/report?format=${format}`, `shizu_intraday_report.${format}`),
 };

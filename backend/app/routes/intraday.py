@@ -1,6 +1,8 @@
 from datetime import datetime
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -19,6 +21,7 @@ from app.services.intraday_monitor import (
     remove_cached_intraday,
     scan_intraday_watchlist,
 )
+from app.services.intraday_report import build_intraday_report, report_filename, report_to_csv
 from app.services.market import validate_market_symbol
 from app.services.search import resolve_symbol_name
 from app.services.us_market_hours import market_status_to_dict
@@ -192,3 +195,26 @@ def get_intraday_history(
         "offset": offset,
         "has_more": offset + len(records) < total,
     }
+
+
+@router.get("/report")
+def download_intraday_report(
+    format: str = Query("json", pattern="^(json|csv)$"),
+    db: Session = Depends(get_db),
+):
+    """Download full intraday report for algo review (JSON with analysis, or CSV trade log)."""
+    report = build_intraday_report(db)
+    filename = report_filename(format)
+    if format == "csv":
+        body = report_to_csv(report)
+        return Response(
+            content=body,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    body = json.dumps(report, indent=2, default=str)
+    return Response(
+        content=body,
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

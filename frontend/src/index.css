@@ -1941,6 +1941,55 @@ input {
   gap: 24px;
 }
 
+.intraday-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.intraday-download-wrap {
+  position: relative;
+}
+
+.intraday-download-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 240px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.intraday-download-menu button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.intraday-download-menu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.intraday-download-menu button span {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
 .intraday-toolbar {
   display: flex;
   flex-wrap: wrap;
