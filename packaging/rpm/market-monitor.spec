@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.5.8
+Version:        1.5.9
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,8 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.9-1
+- Intraday profitability filters: daily trend alignment, VWAP chase block, RVOL, RSI, 10AM start
 * Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.8-1
 - Intraday replay backtest: pick symbol + date, rerun current logic on historical bars
 * Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.7-1

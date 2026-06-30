@@ -78,8 +78,9 @@ const INTRADAY_TECH = [
   { label: "Data source", value: "Yahoo Finance via yfinance (free delayed quotes — not Level II)" },
   { label: "Chart type", value: "OHLC candlesticks on 5m and 15m bars" },
   { label: "Timeframes", value: "Daily (trend) · 15m (intraday trend) · 5m (entry & signals)" },
-  { label: "Scan frequency", value: "Every 2 minutes while US market is open (9:30 AM–4:00 PM ET, Mon–Fri)" },
-  { label: "Session", value: "US Eastern (America/New_York); scans pause when market is closed; trades expire at 4:00 PM ET" },
+  { label: "Scan frequency", value: "Every 2 minutes, entries only 10:00 AM–3:00 PM ET (Mon–Fri)" },
+  { label: "Session", value: "US Eastern; scans pause when market is closed; trades expire at 4:00 PM ET" },
+  { label: "Profit filters", value: "Daily trend must align; no VWAP chase; RVOL ≥ 1×; RSI extremes blocked; no first 30 min" },
   { label: "Algo report", value: "Download report (JSON/CSV) on the Intraday tab — full trade history, factor breakdown, and tuning insights" },
   { label: "Train / test export", value: "Pick date range → Export train/test JSON or CSV with factor features and win labels for model experiments" },
   { label: "Replay backtest", value: "Pick any symbol + date → Reruns current rules on Yahoo history; shows entry/stop/targets and simulated hit or fail" },
@@ -156,11 +157,11 @@ const INTRADAY_FACTORS = [
 const INTRADAY_SIGNALS = [
   {
     action: "LONG",
-    desc: "Weighted score ≥ +0.38, confidence ≥ 45%, 3+ core factors aligned (structure/VWAP/EMA/RVOL), daily trend not bearish. One trade per symbol per day.",
+    desc: "Bullish daily trend required. Score ≥ +0.38, confidence ≥ 45%, 3+ core factors, VWAP/RVOL/RSI filters pass. One trade/symbol/day.",
   },
   {
     action: "SHORT",
-    desc: "Weighted score ≤ −0.38, confidence ≥ 45%, 3+ core factors aligned, daily trend not bullish. No entries after 3:00 PM ET.",
+    desc: "Bearish daily trend required. Score ≤ −0.38, confidence ≥ 45%, price at/below VWAP, same quality filters. No entries after 3 PM ET.",
   },
   {
     action: "HOLD",

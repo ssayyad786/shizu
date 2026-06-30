@@ -16,30 +16,37 @@ INTRADAY_MIN_SCORE = 0.38
 STOP_ATR_MULT = 1.25
 MIN_STOP_PCT = 0.30
 ENTRY_CUTOFF_ET = time(15, 0)  # no new trades after 3:00 PM ET
+ENTRY_EARLIEST_ET = time(10, 0)  # skip opening chop (first 30 min)
 MIN_CORE_CONFLUENCE = 3  # of Structure, VWAP, EMA, RVOL must align
+VWAP_MAX_CHASE_PCT = 0.70  # block long if too far above VWAP
+VWAP_MAX_DUMP_PCT = 0.70  # block short if too far below VWAP
+VWAP_MIN_LONG_PCT = -0.35  # block long if still below VWAP
+MIN_RVOL_FOR_ENTRY = 1.0
+RSI_BLOCK_LONG = 68
+RSI_BLOCK_SHORT = 32
 
 WEIGHTS = {
-    "market_structure": 0.25,
-    "vwap": 0.20,
-    "volume": 0.15,
+    "market_structure": 0.28,
+    "vwap": 0.22,
+    "volume": 0.18,
     "ema": 0.10,
-    "opening_context": 0.10,
+    "opening_context": 0.08,
     "atr": 0.05,
     "rsi": 0.05,
-    "candlestick": 0.05,
-    "macd": 0.05,
+    "candlestick": 0.02,
+    "macd": 0.02,
 }
 
 FACTOR_LABELS = {
-    "market_structure": ("Market structure", "25%"),
-    "vwap": ("VWAP", "20%"),
-    "volume": ("Relative volume (RVOL)", "15%"),
+    "market_structure": ("Market structure", "28%"),
+    "vwap": ("VWAP", "22%"),
+    "volume": ("Relative volume (RVOL)", "18%"),
     "ema": ("EMA alignment (9/20/50)", "10%"),
-    "opening_context": ("Opening range & gap", "10%"),
+    "opening_context": ("Opening range & gap", "8%"),
     "atr": ("ATR volatility", "5%"),
     "rsi": ("RSI exhaustion / divergence", "5%"),
-    "candlestick": ("Candlestick pattern", "5%"),
-    "macd": ("MACD confirmation", "5%"),
+    "candlestick": ("Candlestick pattern", "2%"),
+    "macd": ("MACD confirmation", "2%"),
 }
 
 INDICATOR_KEYS = {
@@ -401,6 +408,57 @@ def _too_late_for_entry(as_of_et: datetime | None = None) -> bool:
     return now_et >= cutoff
 
 
+def _too_early_for_entry(as_of_et: datetime | None = None) -> bool:
+    now_et = as_of_et or datetime.now(US_EASTERN)
+    earliest = datetime.combine(now_et.date(), ENTRY_EARLIEST_ET, tzinfo=US_EASTERN)
+    return now_et < earliest
+
+
+def _entry_quality_block(
+    want_long: bool,
+    price: float,
+    vwap: float | None,
+    rvol: float | None,
+    indicators: list[IndicatorSignal],
+    as_of_et: datetime | None,
+) -> str | None:
+    """Profitability filters from backtest analysis. None = pass."""
+    if _too_early_for_entry(as_of_et):
+        return "Before 10:00 AM ET — opening range still forming, skip first 30 minutes."
+
+    if vwap and vwap > 0:
+        dist = (price - vwap) / vwap * 100
+        if want_long:
+            if dist < VWAP_MIN_LONG_PCT:
+                return f"Price {dist:+.1f}% below VWAP — wait for reclaim before going long."
+            if dist > VWAP_MAX_CHASE_PCT:
+                return f"Price {dist:+.1f}% above VWAP — chasing extension, wait for pullback."
+        else:
+            if dist > 0.15:
+                return "Price still above VWAP — do not short while holding above session average."
+            if dist < -VWAP_MAX_DUMP_PCT:
+                return f"Price {dist:+.1f}% below VWAP — shorting into oversold extension."
+
+    if rvol is not None and rvol < MIN_RVOL_FOR_ENTRY:
+        return f"RVOL {rvol:.1f}× below {MIN_RVOL_FOR_ENTRY}× — need volume confirmation."
+
+    rsi_ind = next((i for i in indicators if i.name == "RSI"), None)
+    if rsi_ind and rsi_ind.value is not None:
+        rsi_val = rsi_ind.value
+        if want_long:
+            if rsi_val >= RSI_BLOCK_LONG:
+                return f"RSI overbought ({rsi_val:.0f}) — late long entry risk."
+            if rsi_ind.score <= -0.3:
+                return "RSI divergence/exhaustion against long direction."
+        else:
+            if rsi_val <= RSI_BLOCK_SHORT:
+                return f"RSI oversold ({rsi_val:.0f}) — shorting into bounce risk."
+            if rsi_ind.score >= 0.3:
+                return "RSI divergence/exhaustion against short direction."
+
+    return None
+
+
 def _factor_aligns_direction(ind: IndicatorSignal, want_long: bool) -> bool:
     if want_long:
         return ind.score >= 0.15
@@ -522,13 +580,16 @@ def analyze_intraday(
     atr_ind = next((i for i in indicators if i.name == "ATR"), None)
     low_vol = bool(atr_ind and atr_ind.score < 0)
     late_entry = _too_late_for_entry(as_of_et)
+    early_entry = _too_early_for_entry(as_of_et)
+    quality_block: str | None = None
 
     long_ok = (
         score >= INTRADAY_MIN_SCORE
         and confidence >= INTRADAY_MIN_CONFIDENCE
         and not low_vol
         and not late_entry
-        and daily_trend != "bearish"
+        and not early_entry
+        and daily_trend == "bullish"
         and _has_core_confluence(indicators, want_long=True)
     )
     short_ok = (
@@ -536,9 +597,19 @@ def analyze_intraday(
         and confidence >= INTRADAY_MIN_CONFIDENCE
         and not low_vol
         and not late_entry
-        and daily_trend != "bullish"
+        and not early_entry
+        and daily_trend == "bearish"
         and _has_core_confluence(indicators, want_long=False)
     )
+
+    if long_ok:
+        quality_block = _entry_quality_block(True, price, vwap, rvol, indicators, as_of_et)
+        if quality_block:
+            long_ok = False
+    elif short_ok:
+        quality_block = _entry_quality_block(False, price, vwap, rvol, indicators, as_of_et)
+        if quality_block:
+            short_ok = False
 
     if long_ok:
         direction = Direction.LONG
@@ -560,10 +631,18 @@ def analyze_intraday(
         )
     elif late_entry:
         summary = "No new intraday entries after 3:00 PM ET — not enough time to reach targets."
+    elif early_entry:
+        summary = "Before 10:00 AM ET — wait for opening range; no entries in first 30 minutes."
+    elif quality_block:
+        summary = f"Setup filtered for profitability — {quality_block}"
     elif daily_trend == "bearish" and score >= INTRADAY_MIN_SCORE:
-        summary = "Long setup blocked — daily trend is bearish (trade with the higher timeframe)."
+        summary = "Long blocked — daily trend must be bullish (not just neutral/bearish)."
     elif daily_trend == "bullish" and score <= -INTRADAY_MIN_SCORE:
-        summary = "Short setup blocked — daily trend is bullish (trade with the higher timeframe)."
+        summary = "Short blocked — daily trend must be bearish (not just neutral/bullish)."
+    elif daily_trend != "bullish" and score >= INTRADAY_MIN_SCORE:
+        summary = "Long requires bullish daily trend (price above 21-day EMA)."
+    elif daily_trend != "bearish" and score <= -INTRADAY_MIN_SCORE:
+        summary = "Short requires bearish daily trend (price below 21-day EMA)."
     elif score >= INTRADAY_MIN_SCORE or score <= -INTRADAY_MIN_SCORE:
         summary = (
             "Score reached threshold but core factors lack confluence — "

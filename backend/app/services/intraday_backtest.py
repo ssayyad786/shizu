@@ -12,12 +12,13 @@ from app.services.intraday_history import intraday_to_dict
 from app.services.intraday_monitor import signal_to_api_dict
 from app.services.intraday_signals import (
     ENTRY_CUTOFF_ET,
+    ENTRY_EARLIEST_ET,
     SESSION_CLOSE,
     US_EASTERN,
     analyze_intraday,
 )
 from app.services.market_data import fetch_history
-from app.services.us_market_hours import SESSION_OPEN, is_us_trading_day
+from app.services.us_market_hours import is_us_trading_day
 from app.version import __version__
 
 SCAN_INTERVAL_MINUTES = 2
@@ -44,7 +45,7 @@ def _parse_trade_date(date_str: str) -> date:
 
 
 def _scan_times(trade_date: date) -> list[datetime]:
-    open_dt = datetime.combine(trade_date, SESSION_OPEN, tzinfo=US_EASTERN)
+    open_dt = datetime.combine(trade_date, ENTRY_EARLIEST_ET, tzinfo=US_EASTERN)
     cutoff_dt = datetime.combine(trade_date, ENTRY_CUTOFF_ET, tzinfo=US_EASTERN)
     times: list[datetime] = []
     t = open_dt
@@ -298,7 +299,7 @@ def backtest_intraday(symbol: str, date_str: str, db: Session | None = None) -> 
         "scan_log": scan_log,
         "recorded_trade": recorded,
         "notes": [
-            "Replay runs current intraday rules every 2 minutes from 9:30 AM–3:00 PM ET.",
+            "Replay runs current intraday rules every 2 minutes from 10:00 AM–3:00 PM ET.",
             "First actionable signal is taken (one trade per replay, matching live save rules).",
             "Outcome uses 5m bar highs/lows after entry through market close.",
             "Compare recorded_trade if the app actually traded this symbol that day.",
