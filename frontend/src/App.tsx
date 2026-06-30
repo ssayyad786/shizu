@@ -6,6 +6,7 @@ import BrandMark from "./components/BrandMark";
 import HistoryPanel from "./components/HistoryPanel";
 import HoldingsPanel from "./components/HoldingsPanel";
 import IntradayPanel from "./components/IntradayPanel";
+import IntradayReportDownload from "./components/IntradayReportDownload";
 import MarketTabs from "./components/MarketTabs";
 import MobileToolbar from "./components/MobileToolbar";
 import OpportunityPanel from "./components/OpportunityPanel";
@@ -371,6 +372,9 @@ export default function App() {
         </div>
         <div className="header-actions">
           {!isMobileLayout && <ViewModeToggle mode={viewMode} onChange={changeViewMode} />}
+          {activeTab === "intraday" && (
+            <IntradayReportDownload compact />
+          )}
           {activeTab === "dashboard" && (
             <>
               <span className="badge live">Monitoring</span>

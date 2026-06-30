@@ -3,7 +3,6 @@ import {
   api,
   IntradayHistoryRecord,
   IntradayLiveSignal,
-  IntradayReportFormat,
   IntradayStats,
   IntradayWatchlistItem,
   Market,
@@ -11,6 +10,7 @@ import {
 } from "../api";
 import WishlistAdd from "./WishlistAdd";
 import WhyTradeBlock from "./WhyTradeBlock";
+import IntradayReportDownload from "./IntradayReportDownload";
 
 function fmt(n: number) {
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -247,8 +247,6 @@ export default function IntradayPanel() {
   const [lastScan, setLastScan] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
-  const [downloading, setDownloading] = useState<IntradayReportFormat | null>(null);
-  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [error, setError] = useState("");
 
   const refresh = useCallback(async (silent = false) => {
@@ -280,13 +278,6 @@ export default function IntradayPanel() {
     const interval = setInterval(() => refresh(true), 60000);
     return () => clearInterval(interval);
   }, [refresh]);
-
-  useEffect(() => {
-    if (!showDownloadMenu) return;
-    const close = () => setShowDownloadMenu(false);
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
-  }, [showDownloadMenu]);
 
   const handleAdd = async (symbol: string, _market: Market, name?: string) => {
     await api.addIntradaySymbol(symbol, name);
@@ -321,18 +312,6 @@ export default function IntradayPanel() {
     }
   };
 
-  const handleDownload = async (format: IntradayReportFormat) => {
-    setShowDownloadMenu(false);
-    setDownloading(format);
-    try {
-      await api.downloadIntradayReport(format);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to download report");
-    } finally {
-      setDownloading(null);
-    }
-  };
-
   const marketOpen = market?.is_open ?? false;
 
   const openTodayTrades = todayTrades.filter((t) => t.status === "open");
@@ -340,6 +319,8 @@ export default function IntradayPanel() {
   return (
     <div className="intraday-panel">
       {market && <UsMarketBanner market={market} />}
+
+      <IntradayReportDownload onError={setError} />
 
       <div className="intraday-toolbar">
         <p className="intraday-intro">
@@ -353,30 +334,6 @@ export default function IntradayPanel() {
         </p>
         <div className="intraday-toolbar-actions">
           {lastScan && <span className="scan-info">Last scan: {new Date(lastScan).toLocaleString()}</span>}
-          <div className="intraday-download-wrap" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setShowDownloadMenu((v) => !v)}
-              disabled={downloading !== null}
-              aria-expanded={showDownloadMenu}
-              aria-haspopup="menu"
-            >
-              {downloading ? "Downloading…" : "Download report ▾"}
-            </button>
-            {showDownloadMenu && (
-              <div className="intraday-download-menu" role="menu">
-                <button type="button" role="menuitem" onClick={() => handleDownload("json")}>
-                  Full report (JSON)
-                  <span>For algo review — trades, factors, insights</span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => handleDownload("csv")}>
-                  Trade log (CSV)
-                  <span>Spreadsheet-friendly history</span>
-                </button>
-              </div>
-            )}
-          </div>
           <button
             className="btn btn-ghost"
             onClick={handleScan}
@@ -387,6 +344,8 @@ export default function IntradayPanel() {
           </button>
         </div>
       </div>
+
+      {error && <div className="error content-error">{error}</div>}
 
       {stats && <StatsBar stats={stats} />}
 
@@ -455,10 +414,12 @@ export default function IntradayPanel() {
       )}
 
       <section className="intraday-section">
-        <h2 className="section-title">Intraday history &amp; accuracy</h2>
+        <div className="intraday-section-header">
+          <h2 className="section-title">Intraday history &amp; accuracy</h2>
+          <IntradayReportDownload compact onError={setError} />
+        </div>
         <p className="intraday-history-note">
           Separate from swing History — tracks only intraday trade ideas.
-          Use <strong>Download report</strong> to export trades and model analysis for tuning the algo.
         </p>
         {history.length === 0 ? (
           <div className="empty-state"><p>No intraday trades recorded yet.</p></div>
