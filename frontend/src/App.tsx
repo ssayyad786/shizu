@@ -168,7 +168,7 @@ export default function App() {
       setActiveMarket(market);
       await loadWishlist();
       try {
-        await api.triggerScan();
+        await api.scanSymbol(symbol, market);
         await refreshSignals();
       } catch (scanErr) {
         setError(
@@ -229,9 +229,19 @@ export default function App() {
 
   const handleScan = async () => {
     setScanning(true);
+    const scanStartedAt = lastScan;
     try {
       await api.triggerScan();
-      await refreshSignals();
+      for (let i = 0; i < 60; i++) {
+        const data = await api.getSignals();
+        setSignals(data.signals);
+        setOpportunities(data.opportunities);
+        setLastScan(data.last_scan);
+        if (!data.scan_in_progress && data.last_scan && data.last_scan !== scanStartedAt) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
     } finally {
       setScanning(false);
     }

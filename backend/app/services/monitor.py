@@ -1,7 +1,6 @@
 import logging
-
+import threading
 from dataclasses import asdict
-
 from datetime import datetime
 
 
@@ -37,6 +36,12 @@ _last_scan: datetime | None = None
 _holdings_signals: dict[str, dict] = {}
 
 _last_holdings_scan: datetime | None = None
+_scan_lock = threading.Lock()
+_scan_in_progress = False
+
+
+def is_scan_in_progress() -> bool:
+    return _scan_in_progress
 
 
 
@@ -219,7 +224,28 @@ def scan_wishlist(db: Session | None = None) -> list[dict]:
             db.close()
 
 
+def scan_wishlist_background() -> bool:
+    """Run a full wishlist scan in a background thread. Returns False if one is already running."""
+    global _scan_in_progress
 
+    if not _scan_lock.acquire(blocking=False):
+        logger.info("Scan already in progress, skipping duplicate request")
+        return False
+
+    def _run():
+        global _scan_in_progress
+        try:
+            _scan_in_progress = True
+            scan_wishlist()
+            scan_holdings()
+        except Exception:
+            logger.exception("Background wishlist scan failed")
+        finally:
+            _scan_in_progress = False
+            _scan_lock.release()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return True
 
 
 def scan_holding(item: HoldingItem, db: Session | None = None) -> dict:

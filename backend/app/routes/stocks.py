@@ -1,8 +1,10 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
+from app.database import get_db
 from app.services.market import infer_market
 from app.services.market_data import df_to_candles, fetch_history, fetch_quote
-from app.services.monitor import get_cached_signals, scan_symbol, scan_wishlist
+from app.services.monitor import get_cached_signals, is_scan_in_progress, scan_symbol, scan_wishlist_background
 from app.services.search import search_symbols
 from app.services.signals import analyze, compute_chart_indicators, signal_outlook_to_dict, trade_plan_to_dict
 
@@ -27,14 +29,14 @@ def get_signals(market: str | None = Query(None, pattern=r"^(US|IN)$")):
         "signals": signals,
         "opportunities": opportunities,
         "last_scan": last_scan.isoformat() if last_scan else None,
+        "scan_in_progress": is_scan_in_progress(),
     }
 
 
 @router.post("/scan")
 def trigger_scan():
-    results = scan_wishlist()
-    opportunities = [s for s in results if s.get("can_earn")]
-    return {"scanned": len(results), "opportunities": opportunities, "signals": results}
+    started = scan_wishlist_background()
+    return {"status": "started" if started else "already_running"}
 
 
 @router.get("/stocks/{symbol}")
@@ -83,9 +85,13 @@ def get_quote(symbol: str):
 
 
 @router.post("/stocks/{symbol}/scan")
-def scan_single(symbol: str, market: str | None = Query(None, pattern=r"^(US|IN)$")):
+def scan_single(
+    symbol: str,
+    market: str | None = Query(None, pattern=r"^(US|IN)$"),
+    db: Session = Depends(get_db),
+):
     try:
         m = market.upper() if market else infer_market(symbol)
-        return scan_symbol(symbol, market=m)
+        return scan_symbol(symbol, db=db, market=m)
     except ValueError as e:
         raise HTTPException(404, str(e)) from e

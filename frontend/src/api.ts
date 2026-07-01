@@ -413,6 +413,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
         : Array.isArray(detail)
           ? detail.map((d: { msg?: string }) => d.msg || String(d)).join(", ")
           : res.statusText;
+    if (res.status === 504) {
+      throw new Error("Server timed out — try again in a moment");
+    }
     throw new Error(message || "Request failed");
   }
   return res.json();
@@ -466,11 +469,18 @@ export const api = {
   removeFromWishlist: (symbol: string, market: Market) =>
     request<{ ok: boolean }>(`/wishlist/${symbol}?market=${market}`, { method: "DELETE" }),
   getSignals: (market?: Market) =>
-    request<{ signals: StockSignal[]; opportunities: StockSignal[]; last_scan: string | null }>(
-      market ? `/signals?market=${market}` : "/signals"
-    ),
+    request<{
+      signals: StockSignal[];
+      opportunities: StockSignal[];
+      last_scan: string | null;
+      scan_in_progress: boolean;
+    }>(market ? `/signals?market=${market}` : "/signals"),
   triggerScan: () =>
-    request<{ scanned: number; opportunities: StockSignal[]; signals: StockSignal[] }>("/scan", { method: "POST" }),
+    request<{ status: "started" | "already_running" }>("/scan", { method: "POST" }),
+  scanSymbol: (symbol: string, market: Market) =>
+    request<StockSignal>(`/stocks/${encodeURIComponent(symbol)}/scan?market=${market}`, {
+      method: "POST",
+    }),
   getStockDetail: (symbol: string, period = "6mo", interval = "1d") =>
     request<StockDetail>(`/stocks/${symbol}?period=${period}&interval=${interval}`),
   searchStocks: (q: string) =>
