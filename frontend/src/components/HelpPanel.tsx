@@ -75,96 +75,71 @@ const SIGNALS = [
 ];
 
 const INTRADAY_TECH = [
+  { label: "Model", value: "ORB + VWAP playbook — 15-minute Opening Range Breakout with VWAP alignment & volume confirmation" },
   { label: "Data source", value: "Yahoo Finance via yfinance (free delayed quotes — not Level II)" },
   { label: "Chart type", value: "OHLC candlesticks on 5m and 15m bars" },
-  { label: "Timeframes", value: "Daily (trend) · 15m (intraday trend) · 5m (entry & signals)" },
-  { label: "Scan frequency", value: "Every 2 minutes, entries 9:45 AM–3:00 PM ET (Mon–Fri)" },
-  { label: "Session", value: "US Eastern; scans pause when market is closed; trades expire at 4:00 PM ET" },
-  { label: "Profit filters", value: "2+ core factors; RVOL ≥ 0.85×; blocks gap/OR chase, score+RSI exhaustion, OR candle traps" },
-  { label: "Algo report", value: "Download report (JSON/CSV) on the Intraday tab — full trade history, factor breakdown, and tuning insights" },
-  { label: "Replay backtest", value: "Pick any symbol + date → Reruns current rules on Yahoo history; shows entry/stop/targets and simulated hit or fail" },
-  { label: "Engine", value: "Rule-based weighted scorer (not ML) — Python + pandas + ta library" },
-  { label: "Stops & targets", value: "5m ATR(14): stop = 1.25× ATR (min 0.30%), T1 = 1.5× stop distance, T2 = 2.5×" },
+  { label: "Timeframes", value: "Daily (trend filter) · 15m (EMA) · 5m (ORB entry & volume)" },
+  { label: "Opening range", value: "First 15 minutes (9:30–9:45 AM ET) high/low — industry-standard ORB window" },
+  { label: "Entry window", value: "9:45 AM–2:30 PM ET — breakouts & retests only; no late-day entries" },
+  { label: "Scan frequency", value: "Every 2 minutes while US market is open (Mon–Fri)" },
+  { label: "Volume rule", value: "Breakout ≥1.15× 20-bar avg; retest/continuation ≥1.05×; gap-up chase blocked" },
+  { label: "VWAP rule", value: "Long only above session VWAP; short only below (institutional fair-value filter)" },
+  { label: "Algo report", value: "Download report (JSON/CSV) on the Intraday tab — trade history & factor breakdown" },
+  { label: "Replay backtest", value: "Pick symbol + date → reruns current ORB rules on Yahoo 5m/15m history" },
+  { label: "Engine", value: "Rule-based ORB playbook (not ML) — Python + pandas + ta" },
+  { label: "Stops & targets", value: "Stop at opposite side of 15m OR (min 1.25× ATR or 0.30%); T1 = 1.5R, T2 = 2.5R" },
 ];
 
 const INTRADAY_FACTORS = [
   {
-    name: "Market structure",
+    name: "Opening range (ORB)",
+    weight: "35%",
+    what: "15-minute high/low from 9:30–9:45 ET. Core signal: candle close beyond range with volume.",
+    long: "Close above OR high on a bullish bar (breakout), retest at OR high, or VWAP continuation.",
+    short: "Close below OR low on a bearish bar, with retest entries near broken OR low.",
+  },
+  {
+    name: "VWAP alignment",
     weight: "25%",
-    what: "Detects higher-high/higher-low (uptrend) or lower-high/lower-low (downtrend) on 15m bars.",
-    long: "HH + HL on 15m — bullish structure.",
-    short: "LH + LL on 15m — bearish structure.",
+    what: "Session VWAP — where institutions judge fair price. Required for every trade.",
+    long: "Price above VWAP (not extended >0.85%).",
+    short: "Price below VWAP (not extended >0.85%).",
   },
   {
-    name: "VWAP",
+    name: "Breakout volume",
     weight: "20%",
-    what: "Volume-weighted average price for today's session — key institutional reference.",
-    long: "Price above VWAP — bullish intraday bias.",
-    short: "Price below VWAP — bearish intraday bias.",
+    what: "Current 5m bar volume vs average volume of the three opening-range bars.",
+    long: "≥ 1.2× OR average on breakout bar (up bar).",
+    short: "≥ 1.2× OR average on breakout bar (down bar).",
   },
   {
-    name: "Relative volume (RVOL)",
-    weight: "15%",
-    what: "Current 5m bar volume vs 20-bar average.",
-    long: "RVOL ≥ 1.5× on an up bar — buying pressure.",
-    short: "RVOL ≥ 1.5× on a down bar — selling pressure.",
-  },
-  {
-    name: "EMA alignment (9 / 20 / 50)",
+    name: "EMA 9 / 20 stack",
     weight: "10%",
-    what: "Short-term EMA stack on 15m chart.",
-    long: "Price > EMA9 > EMA20 > EMA50 — bullish stack.",
-    short: "Price < EMA9 < EMA20 < EMA50 — bearish stack.",
+    what: "Short-term trend on 15m chart — micro-trend confirmation.",
+    long: "Price > EMA9 > EMA20.",
+    short: "Price < EMA9 < EMA20.",
   },
   {
-    name: "Opening range & gap",
+    name: "Daily trend (21 EMA)",
     weight: "10%",
-    what: "First 15 minutes high/low plus overnight gap vs prior close.",
-    long: "Gap up or price above opening-range high.",
-    short: "Gap down or price below opening-range low.",
-  },
-  {
-    name: "ATR volatility",
-    weight: "5%",
-    what: "Filters choppy or extreme volatility on 5m ATR(14).",
-    long: "Tradeable range — setup allowed.",
-    short: "Too quiet or too wild — trade blocked.",
-  },
-  {
-    name: "RSI exhaustion / divergence",
-    weight: "5%",
-    what: "RSI(14) on 5m — used for exhaustion and divergence, not as primary trigger.",
-    long: "Bullish divergence or oversold exhaustion.",
-    short: "Bearish divergence or overbought exhaustion.",
-  },
-  {
-    name: "Candlestick pattern",
-    weight: "5%",
-    what: "Hammer, engulfing, shooting star, marubozu on latest 5m bars.",
-    long: "Bullish hammer or engulfing.",
-    short: "Shooting star or bearish engulfing.",
-  },
-  {
-    name: "MACD confirmation",
-    weight: "5%",
-    what: "MACD histogram direction on 5m — confirmation only.",
-    long: "Histogram turning up.",
-    short: "Histogram turning down.",
+    what: "Higher-timeframe bias — avoids worst counter-trend ORB fades.",
+    long: "Daily not bearish (bullish or neutral OK).",
+    short: "Daily bearish required (price below 21-day EMA).",
   },
 ];
 
 const INTRADAY_SIGNALS = [
   {
     action: "LONG",
-    desc: "Bullish or strong-neutral daily. Score ≥ +0.40, 2+ core factors, quality filters (no gap chase / OR traps). One trade/symbol/day.",
+    desc: "ORB breakout or retest above 15m range high, price above VWAP, volume ≥1.2×, daily not bearish. One trade/symbol/day.",
   },
   {
     action: "SHORT",
-    desc: "Bearish or strong-neutral daily. Score ≤ −0.40, 2+ core factors, gap-bounce guard on shorts. No entries after 3 PM ET.",
+    desc: "Bearish daily required. ORB breakout/retest below range low, below VWAP, volume confirmed. Until 2:30 PM ET.",
   },
   {
     action: "HOLD",
-    desc: "Score or confidence below threshold, or ATR too low — no trade issued.",
+    desc: "Inside opening range, VWAP misaligned, weak volume, or daily trend opposes direction.",
   },
 ];
 
@@ -224,10 +199,10 @@ export default function HelpPanel() {
       <section className="help-section">
         <h2>US Intraday — technology &amp; model</h2>
         <p style={{ marginBottom: 12 }}>
-          The <strong>Intraday</strong> tab uses a <strong>separate engine</strong> from the swing dashboard.
-          It is tuned for US same-day trades only (no India intraday yet). Each trade card shows a{" "}
-          <strong>&quot;Why this trade&quot;</strong> section listing every factor, its weight, and whether
-          it is bullish, bearish, or neutral for that setup.
+          The <strong>Intraday</strong> tab uses an <strong>ORB + VWAP playbook</strong> — the same approach
+          used by institutional day traders: mark the first 15 minutes, trade breakouts only when price aligns
+          with session VWAP and volume confirms. Each trade card shows <strong>&quot;Why this trade&quot;</strong>{" "}
+          with ORB, VWAP, volume, EMA, and daily trend.
         </p>
         <table className="help-table help-tech-table">
           <tbody>
@@ -248,8 +223,9 @@ export default function HelpPanel() {
       <section className="help-section">
         <h2>Intraday scoring factors</h2>
         <p style={{ marginBottom: 12 }}>
-          Nine factors are weighted and summed into a single score. Daily trend (21 EMA) adds a small
-          ±0.05 bias. Actionable LONG/SHORT requires |score| ≥ 0.40, confidence ≥ 45%, and 2+ aligned core factors.
+          Five factors power the <strong>ORB + VWAP playbook</strong>. A valid trade needs a 15-minute opening
+          range break (or retest), VWAP alignment, volume ≥1.2× the OR average, and daily trend not opposing.
+          Score ≥ 0.35 and confidence ≥ 50% required.
         </p>
         <div className="help-grid">
           {INTRADAY_FACTORS.map((f) => (

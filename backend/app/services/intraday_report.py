@@ -299,7 +299,7 @@ def build_intraday_report(db: Session) -> dict:
         "app_version": __version__,
         "market": market_status_to_dict(),
         "model": {
-            "name": "US intraday weighted scorer",
+            "name": "US intraday ORB + VWAP playbook",
             "min_confidence": INTRADAY_MIN_CONFIDENCE,
             "min_score": INTRADAY_MIN_SCORE,
             "factor_weights": WEIGHTS,
