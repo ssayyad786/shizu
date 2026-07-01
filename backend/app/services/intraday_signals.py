@@ -12,18 +12,29 @@ import ta
 US_EASTERN = ZoneInfo("America/New_York")
 SESSION_CLOSE = time(16, 0)
 INTRADAY_MIN_CONFIDENCE = 45.0
-INTRADAY_MIN_SCORE = 0.38
+INTRADAY_MIN_SCORE = 0.40
 STOP_ATR_MULT = 1.25
 MIN_STOP_PCT = 0.30
 ENTRY_CUTOFF_ET = time(15, 0)  # no new trades after 3:00 PM ET
-ENTRY_EARLIEST_ET = time(10, 0)  # skip opening chop (first 30 min)
-MIN_CORE_CONFLUENCE = 3  # of Structure, VWAP, EMA, RVOL must align
+ENTRY_EARLIEST_ET = time(9, 45)  # skip first 15 min of open
+MIN_CORE_CONFLUENCE = 2  # of Structure, VWAP, EMA, RVOL must align
 VWAP_MAX_CHASE_PCT = 0.70  # block long if too far above VWAP
 VWAP_MAX_DUMP_PCT = 0.70  # block short if too far below VWAP
-VWAP_MIN_LONG_PCT = -0.35  # block long if still below VWAP
-MIN_RVOL_FOR_ENTRY = 1.0
+VWAP_MIN_LONG_PCT = -0.45  # allow long on VWAP reclaim setups
+MIN_RVOL_FOR_ENTRY = 0.85
 RSI_BLOCK_LONG = 68
 RSI_BLOCK_SHORT = 32
+SCORE_EXHAUST_LONG = 0.60  # high score + warm RSI = late chase
+RSI_EXHAUST_LONG = 58
+GAP_CHASE_MIN_PCT = 1.0  # gap-up day: need VWAP hold before long above OR
+GAP_VWAP_HOLD_PCT = 0.15  # max distance above VWAP on gap-up OR longs
+OR_VWAP_CHASE_PCT = 0.45
+GAP_DOWN_OR_MORNING_VWAP = 0.35  # gap-down day: no morning chase above OR
+SHORT_GAP_BOUNCE_GAP = -1.2  # big gap down + mid RSI = bounce before short
+SHORT_SEVERE_GAP = -1.4  # block all shorts on severe gap-down days
+SHORT_GAP_BOUNCE_RSI_LOW = 32
+SHORT_GAP_BOUNCE_RSI_HIGH = 46
+DAILY_NEUTRAL_MIN_SCORE = 0.42  # neutral daily OK if score stronger
 
 WEIGHTS = {
     "market_structure": 0.28,
@@ -414,6 +425,18 @@ def _too_early_for_entry(as_of_et: datetime | None = None) -> bool:
     return now_et < earliest
 
 
+def _daily_allows_long(daily_trend: str, score: float) -> bool:
+    if daily_trend == "bullish":
+        return True
+    return daily_trend == "neutral" and score >= DAILY_NEUTRAL_MIN_SCORE
+
+
+def _daily_allows_short(daily_trend: str, score: float) -> bool:
+    if daily_trend == "bearish":
+        return True
+    return daily_trend == "neutral" and score <= -DAILY_NEUTRAL_MIN_SCORE
+
+
 def _entry_quality_block(
     want_long: bool,
     price: float,
@@ -421,19 +444,58 @@ def _entry_quality_block(
     rvol: float | None,
     indicators: list[IndicatorSignal],
     as_of_et: datetime | None,
+    score: float = 0.0,
 ) -> str | None:
     """Profitability filters from backtest analysis. None = pass."""
     if _too_early_for_entry(as_of_et):
-        return "Before 10:00 AM ET — opening range still forming, skip first 30 minutes."
+        return "Before 9:45 AM ET — opening range still forming."
+
+    rsi_ind = next((i for i in indicators if i.name == "RSI"), None)
+    rsi_val = rsi_ind.value if rsi_ind and rsi_ind.value is not None else None
+    og_ind = next((i for i in indicators if i.name == "Open/Gap"), None)
+    candle_ind = next((i for i in indicators if i.name == "Candle"), None)
+    above_or = bool(og_ind and "Above opening range high" in og_ind.detail)
+    inside_or = bool(og_ind and "Inside opening range" in og_ind.detail)
+    gap_pct = float(og_ind.value) if og_ind and og_ind.value is not None else None
 
     if vwap and vwap > 0:
         dist = (price - vwap) / vwap * 100
         if want_long:
+            if inside_or and gap_pct is not None and gap_pct >= 1.5:
+                return (
+                    f"Gap-up (+{gap_pct:.1f}%) still inside opening range — wait for OR breakout + VWAP hold."
+                )
             if dist < VWAP_MIN_LONG_PCT:
                 return f"Price {dist:+.1f}% below VWAP — wait for reclaim before going long."
             if dist > VWAP_MAX_CHASE_PCT:
                 return f"Price {dist:+.1f}% above VWAP — chasing extension, wait for pullback."
+            if (
+                above_or
+                and gap_pct is not None
+                and gap_pct <= -0.5
+                and as_of_et
+                and as_of_et.hour < 12
+                and dist > GAP_DOWN_OR_MORNING_VWAP
+            ):
+                return (
+                    f"Gap-down day ({gap_pct:+.1f}%) above OR before noon ({dist:+.1f}% above VWAP) "
+                    "— wait for afternoon setup."
+                )
+            if above_or and gap_pct is not None and gap_pct >= GAP_CHASE_MIN_PCT and dist > GAP_VWAP_HOLD_PCT:
+                return (
+                    f"Gap-up (+{gap_pct:.1f}%) above OR without VWAP hold ({dist:+.1f}% above VWAP) "
+                    "— wait for pullback."
+                )
+            if above_or and gap_pct is not None and gap_pct >= GAP_CHASE_MIN_PCT + 0.2 and dist > OR_VWAP_CHASE_PCT:
+                return (
+                    f"Gap-up chase (+{gap_pct:.1f}% gap, {dist:+.1f}% above VWAP past OR high) "
+                    "— wait for VWAP pullback."
+                )
         else:
+            if gap_pct is not None and gap_pct <= SHORT_SEVERE_GAP:
+                return (
+                    f"Severe gap down ({gap_pct:.1f}%) — high bounce risk; skip shorts for the session."
+                )
             if dist > 0.15:
                 return "Price still above VWAP — do not short while holding above session average."
             if dist < -VWAP_MAX_DUMP_PCT:
@@ -442,15 +504,27 @@ def _entry_quality_block(
     if rvol is not None and rvol < MIN_RVOL_FOR_ENTRY:
         return f"RVOL {rvol:.1f}× below {MIN_RVOL_FOR_ENTRY}× — need volume confirmation."
 
-    rsi_ind = next((i for i in indicators if i.name == "RSI"), None)
-    if rsi_ind and rsi_ind.value is not None:
-        rsi_val = rsi_ind.value
+    if rsi_ind and rsi_val is not None:
         if want_long:
+            if score >= SCORE_EXHAUST_LONG and rsi_val >= RSI_EXHAUST_LONG:
+                return (
+                    f"Score {score:.2f} with RSI {rsi_val:.0f} — overextended momentum, wait for pullback."
+                )
             if rsi_val >= RSI_BLOCK_LONG:
                 return f"RSI overbought ({rsi_val:.0f}) — late long entry risk."
             if rsi_ind.score <= -0.3:
                 return "RSI divergence/exhaustion against long direction."
+            if candle_ind and candle_ind.score >= 0.65 and above_or:
+                return "Bullish candle at opening-range breakout — often traps; wait for VWAP hold."
         else:
+            if (
+                gap_pct is not None
+                and gap_pct <= SHORT_GAP_BOUNCE_GAP
+                and SHORT_GAP_BOUNCE_RSI_LOW <= rsi_val <= SHORT_GAP_BOUNCE_RSI_HIGH
+            ):
+                return (
+                    f"Gap down {gap_pct:.1f}% with RSI {rsi_val:.0f} — bounce risk; wait before shorting."
+                )
             if rsi_val <= RSI_BLOCK_SHORT:
                 return f"RSI oversold ({rsi_val:.0f}) — shorting into bounce risk."
             if rsi_ind.score >= 0.3:
@@ -589,7 +663,7 @@ def analyze_intraday(
         and not low_vol
         and not late_entry
         and not early_entry
-        and daily_trend == "bullish"
+        and _daily_allows_long(daily_trend, score)
         and _has_core_confluence(indicators, want_long=True)
     )
     short_ok = (
@@ -598,16 +672,20 @@ def analyze_intraday(
         and not low_vol
         and not late_entry
         and not early_entry
-        and daily_trend == "bearish"
+        and _daily_allows_short(daily_trend, score)
         and _has_core_confluence(indicators, want_long=False)
     )
 
     if long_ok:
-        quality_block = _entry_quality_block(True, price, vwap, rvol, indicators, as_of_et)
+        quality_block = _entry_quality_block(
+            True, price, vwap, rvol, indicators, as_of_et, score=score
+        )
         if quality_block:
             long_ok = False
     elif short_ok:
-        quality_block = _entry_quality_block(False, price, vwap, rvol, indicators, as_of_et)
+        quality_block = _entry_quality_block(
+            False, price, vwap, rvol, indicators, as_of_et, score=score
+        )
         if quality_block:
             short_ok = False
 
@@ -632,21 +710,21 @@ def analyze_intraday(
     elif late_entry:
         summary = "No new intraday entries after 3:00 PM ET — not enough time to reach targets."
     elif early_entry:
-        summary = "Before 10:00 AM ET — wait for opening range; no entries in first 30 minutes."
+        summary = "Before 9:45 AM ET — wait for opening range; no entries in first 15 minutes."
     elif quality_block:
         summary = f"Setup filtered for profitability — {quality_block}"
     elif daily_trend == "bearish" and score >= INTRADAY_MIN_SCORE:
-        summary = "Long blocked — daily trend must be bullish (not just neutral/bearish)."
+        summary = "Long blocked — daily trend bearish; need bullish or strong neutral (score ≥ 0.42)."
     elif daily_trend == "bullish" and score <= -INTRADAY_MIN_SCORE:
-        summary = "Short blocked — daily trend must be bearish (not just neutral/bullish)."
-    elif daily_trend != "bullish" and score >= INTRADAY_MIN_SCORE:
-        summary = "Long requires bullish daily trend (price above 21-day EMA)."
-    elif daily_trend != "bearish" and score <= -INTRADAY_MIN_SCORE:
-        summary = "Short requires bearish daily trend (price below 21-day EMA)."
+        summary = "Short blocked — daily trend bullish; need bearish or strong neutral (score ≤ −0.42)."
+    elif not _daily_allows_long(daily_trend, score) and score >= INTRADAY_MIN_SCORE:
+        summary = "Long requires bullish daily trend, or neutral with score ≥ 0.42."
+    elif not _daily_allows_short(daily_trend, score) and score <= -INTRADAY_MIN_SCORE:
+        summary = "Short requires bearish daily trend, or neutral with score ≤ −0.42."
     elif score >= INTRADAY_MIN_SCORE or score <= -INTRADAY_MIN_SCORE:
         summary = (
             "Score reached threshold but core factors lack confluence — "
-            "need 3+ of structure, VWAP, EMA, and RVOL aligned."
+            f"need {MIN_CORE_CONFLUENCE}+ of structure, VWAP, EMA, and RVOL aligned."
         )
     else:
         summary = "No high-probability intraday setup — wait for VWAP + structure alignment."

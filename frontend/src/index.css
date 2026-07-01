@@ -2199,6 +2199,51 @@ input {
   background: rgba(59, 130, 246, 0.06);
 }
 
+.intraday-history-by-date {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.intraday-history-date-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.intraday-history-date-group.is-today {
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.intraday-history-date-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 0 2px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.intraday-history-date-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.intraday-history-date-group.is-today .intraday-history-date-header h3 {
+  color: var(--accent, #3b82f6);
+}
+
+.intraday-history-date-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .intraday-today-note,
 .intraday-history-note {
   font-size: 0.85rem;

@@ -299,7 +299,7 @@ def backtest_intraday(symbol: str, date_str: str, db: Session | None = None) -> 
         "scan_log": scan_log,
         "recorded_trade": recorded,
         "notes": [
-            "Replay runs current intraday rules every 2 minutes from 10:00 AM–3:00 PM ET.",
+            "Replay runs current intraday rules every 2 minutes from 9:45 AM–3:00 PM ET.",
             "First actionable signal is taken (one trade per replay, matching live save rules).",
             "Outcome uses 5m bar highs/lows after entry through market close.",
             "Compare recorded_trade if the app actually traded this symbol that day.",

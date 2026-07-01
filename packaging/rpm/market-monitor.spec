@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.5.9
+Version:        1.5.12
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,12 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.12-1
+- Intraday history grouped by trade date with Today highlight
+* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.11-1
+- Surgical profit filters from Jul 1 replay; loosen confluence/RVOL for more trades
+* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.10-1
+- Remove train/test dataset export (use algo report + replay backtest instead)
 * Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.9-1
 - Intraday profitability filters: daily trend alignment, VWAP chase block, RVOL, RSI, 10AM start
 * Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.8-1

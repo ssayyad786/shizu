@@ -78,11 +78,10 @@ const INTRADAY_TECH = [
   { label: "Data source", value: "Yahoo Finance via yfinance (free delayed quotes — not Level II)" },
   { label: "Chart type", value: "OHLC candlesticks on 5m and 15m bars" },
   { label: "Timeframes", value: "Daily (trend) · 15m (intraday trend) · 5m (entry & signals)" },
-  { label: "Scan frequency", value: "Every 2 minutes, entries only 10:00 AM–3:00 PM ET (Mon–Fri)" },
+  { label: "Scan frequency", value: "Every 2 minutes, entries 9:45 AM–3:00 PM ET (Mon–Fri)" },
   { label: "Session", value: "US Eastern; scans pause when market is closed; trades expire at 4:00 PM ET" },
-  { label: "Profit filters", value: "Daily trend must align; no VWAP chase; RVOL ≥ 1×; RSI extremes blocked; no first 30 min" },
+  { label: "Profit filters", value: "2+ core factors; RVOL ≥ 0.85×; blocks gap/OR chase, score+RSI exhaustion, OR candle traps" },
   { label: "Algo report", value: "Download report (JSON/CSV) on the Intraday tab — full trade history, factor breakdown, and tuning insights" },
-  { label: "Train / test export", value: "Pick date range → Export train/test JSON or CSV with factor features and win labels for model experiments" },
   { label: "Replay backtest", value: "Pick any symbol + date → Reruns current rules on Yahoo history; shows entry/stop/targets and simulated hit or fail" },
   { label: "Engine", value: "Rule-based weighted scorer (not ML) — Python + pandas + ta library" },
   { label: "Stops & targets", value: "5m ATR(14): stop = 1.25× ATR (min 0.30%), T1 = 1.5× stop distance, T2 = 2.5×" },
@@ -157,11 +156,11 @@ const INTRADAY_FACTORS = [
 const INTRADAY_SIGNALS = [
   {
     action: "LONG",
-    desc: "Bullish daily trend required. Score ≥ +0.38, confidence ≥ 45%, 3+ core factors, VWAP/RVOL/RSI filters pass. One trade/symbol/day.",
+    desc: "Bullish or strong-neutral daily. Score ≥ +0.40, 2+ core factors, quality filters (no gap chase / OR traps). One trade/symbol/day.",
   },
   {
     action: "SHORT",
-    desc: "Bearish daily trend required. Score ≤ −0.38, confidence ≥ 45%, price at/below VWAP, same quality filters. No entries after 3 PM ET.",
+    desc: "Bearish or strong-neutral daily. Score ≤ −0.40, 2+ core factors, gap-bounce guard on shorts. No entries after 3 PM ET.",
   },
   {
     action: "HOLD",
@@ -250,7 +249,7 @@ export default function HelpPanel() {
         <h2>Intraday scoring factors</h2>
         <p style={{ marginBottom: 12 }}>
           Nine factors are weighted and summed into a single score. Daily trend (21 EMA) adds a small
-          ±0.05 bias. Actionable LONG/SHORT requires |score| ≥ 0.38, confidence ≥ 45%, and 3+ aligned core factors.
+          ±0.05 bias. Actionable LONG/SHORT requires |score| ≥ 0.40, confidence ≥ 45%, and 2+ aligned core factors.
         </p>
         <div className="help-grid">
           {INTRADAY_FACTORS.map((f) => (

@@ -1,7 +1,7 @@
 {
   "name": "market-monitor-frontend",
   "private": true,
-  "version": "1.5.9",
+  "version": "1.5.12",
   "type": "module",
   "scripts": {
     "dev": "vite",

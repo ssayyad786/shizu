@@ -11,7 +11,6 @@ import {
 import WishlistAdd from "./WishlistAdd";
 import WhyTradeBlock from "./WhyTradeBlock";
 import IntradayReportDownload from "./IntradayReportDownload";
-import IntradayDatasetExport from "./IntradayDatasetExport";
 import IntradayBacktestPanel from "./IntradayBacktestPanel";
 
 function fmt(n: number) {
@@ -157,6 +156,56 @@ function SetupCard({
       )}
     </article>
   );
+}
+
+function tradeDateKey(record: IntradayHistoryRecord): string {
+  return record.trade_date.slice(0, 10);
+}
+
+function formatHistoryDateHeader(dateKey: string, isToday: boolean): string {
+  const d = new Date(`${dateKey}T12:00:00`);
+  const formatted = d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return isToday ? `Today — ${formatted}` : formatted;
+}
+
+function groupHistoryByDate(records: IntradayHistoryRecord[]) {
+  const byDate = new Map<string, IntradayHistoryRecord[]>();
+  for (const record of records) {
+    const key = tradeDateKey(record);
+    const list = byDate.get(key);
+    if (list) list.push(record);
+    else byDate.set(key, [record]);
+  }
+
+  const groups: { dateKey: string; isToday: boolean; trades: IntradayHistoryRecord[] }[] = [];
+  const seen = new Set<string>();
+  for (const record of records) {
+    const key = tradeDateKey(record);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const trades = byDate.get(key) ?? [];
+    groups.push({
+      dateKey: key,
+      isToday: trades.some((t) => t.is_today),
+      trades,
+    });
+  }
+  return groups;
+}
+
+function daySummary(trades: IntradayHistoryRecord[]): string {
+  const closed = trades.filter((t) => t.status !== "open");
+  const wins = closed.filter((t) => t.success).length;
+  const open = trades.length - closed.length;
+  const parts = [`${trades.length} trade${trades.length === 1 ? "" : "s"}`];
+  if (closed.length > 0) parts.push(`${wins}/${closed.length} wins`);
+  if (open > 0) parts.push(`${open} open`);
+  return parts.join(" · ");
 }
 
 function TradeCard({
@@ -317,13 +366,13 @@ export default function IntradayPanel() {
   const marketOpen = market?.is_open ?? false;
 
   const openTodayTrades = todayTrades.filter((t) => t.status === "open");
+  const historyByDate = groupHistoryByDate(history);
 
   return (
     <div className="intraday-panel">
       {market && <UsMarketBanner market={market} />}
 
       <IntradayReportDownload onError={setError} />
-      <IntradayDatasetExport onError={setError} />
       <IntradayBacktestPanel watchlistSymbols={watchlist.map((w) => w.symbol)} onError={setError} />
 
       <div className="intraday-toolbar">
@@ -428,9 +477,22 @@ export default function IntradayPanel() {
         {history.length === 0 ? (
           <div className="empty-state"><p>No intraday trades recorded yet.</p></div>
         ) : (
-          <div className="intraday-card-list">
-            {history.map((r) => (
-              <TradeCard key={r.id} record={r} />
+          <div className="intraday-history-by-date">
+            {historyByDate.map((group) => (
+              <section
+                key={group.dateKey}
+                className={`intraday-history-date-group${group.isToday ? " is-today" : ""}`}
+              >
+                <div className="intraday-history-date-header">
+                  <h3>{formatHistoryDateHeader(group.dateKey, group.isToday)}</h3>
+                  <span className="intraday-history-date-meta">{daySummary(group.trades)}</span>
+                </div>
+                <div className="intraday-card-list">
+                  {group.trades.map((r) => (
+                    <TradeCard key={r.id} record={r} />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         )}
