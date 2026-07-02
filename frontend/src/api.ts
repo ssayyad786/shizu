@@ -1,6 +1,15 @@
+import { holdingsAuthHeaders } from "./holdingsAuth";
+
 export type Market = "US" | "IN";
 
-import { holdingsAuthHeaders } from "./holdingsAuth";
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
 export interface StockSearchResult {
   symbol: string;
@@ -476,7 +485,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     if (res.status === 504) {
       throw new Error("Server timed out — try again in a moment");
     }
-    throw new Error(message || "Request failed");
+    throw new ApiError(message || "Request failed", res.status);
   }
   return res.json();
 }

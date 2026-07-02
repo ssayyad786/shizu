@@ -63,14 +63,25 @@ def validate_password(password: str) -> None:
 
 def create_access_token(profile: HoldingProfile) -> str:
     now = datetime.now(timezone.utc)
+    exp = now + timedelta(days=TOKEN_TTL_DAYS)
     payload = {
         "sub": profile.id,
         "usr": profile.username,
-        "iat": now,
-        "exp": now + timedelta(days=TOKEN_TTL_DAYS),
+        "iat": int(now.timestamp()),
+        "exp": int(exp.timestamp()),
         "typ": "holdings",
     }
-    return jwt.encode(payload, _jwt_secret(), algorithm="HS256")
+    token = jwt.encode(payload, _jwt_secret(), algorithm="HS256")
+    return token if isinstance(token, str) else token.decode("utf-8")
+
+
+def _profile_id_from_token(payload: dict) -> int | None:
+    raw = payload.get("sub")
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str) and raw.isdigit():
+        return int(raw)
+    return None
 
 
 def decode_access_token(token: str) -> dict:
@@ -90,8 +101,8 @@ def get_current_holding_profile(
     if credentials is None or not credentials.credentials:
         raise HTTPException(401, "Sign in to access your holdings")
     payload = decode_access_token(credentials.credentials)
-    profile_id = payload.get("sub")
-    if not isinstance(profile_id, int):
+    profile_id = _profile_id_from_token(payload)
+    if profile_id is None:
         raise HTTPException(401, "Invalid session")
     profile = db.query(HoldingProfile).filter(HoldingProfile.id == profile_id).first()
     if not profile:

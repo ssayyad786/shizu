@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
+  ApiError,
   currencyForMarket,
   HoldingFormData,
   HoldingSignal,
@@ -197,7 +198,7 @@ export default function HoldingsPanel({ market, onMarketChange }: Props) {
 
   const refresh = useCallback(
     async (silent = false) => {
-      if (!session) return;
+      if (!getHoldingsSession()) return;
       if (!silent) setLoading(true);
       try {
         const data = await api.getHoldingsSignals(market);
@@ -207,7 +208,7 @@ export default function HoldingsPanel({ market, onMarketChange }: Props) {
         setError("");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Failed to load holdings";
-        if (msg.includes("Sign in") || msg.includes("session")) {
+        if (e instanceof ApiError && e.status === 401) {
           setHoldingsSession(null);
           setSession(null);
         }
@@ -216,7 +217,7 @@ export default function HoldingsPanel({ market, onMarketChange }: Props) {
         if (!silent) setLoading(false);
       }
     },
-    [market, session]
+    [market]
   );
 
   useEffect(() => {
@@ -227,6 +228,7 @@ export default function HoldingsPanel({ market, onMarketChange }: Props) {
   }, [refresh, session]);
 
   const handleAuthenticated = (s: HoldingsSession) => {
+    setHoldingsSession(s);
     setSession(s);
     setError("");
   };
