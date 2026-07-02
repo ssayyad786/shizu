@@ -125,40 +125,66 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 * Thu Jul 02 2026 Shizu <admin@localhost> - 1.6.1-1
 - Fix gateway timeout: background wishlist scan, single-symbol scan on add
 - Replay backtest: optional date range across US trading days with summary table
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.6.0-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.6.0-1
 - Redesign intraday engine: ORB + VWAP playbook (15m range, volume, daily filter)
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.12-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.5.12-1
 - Intraday history grouped by trade date with Today highlight
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.11-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.5.11-1
 - Surgical profit filters from Jul 1 replay; loosen confluence/RVOL for more trades
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.10-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.5.10-1
 - Remove train/test dataset export (use algo report + replay backtest instead)
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.9-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.5.9-1
 - Intraday profitability filters: daily trend alignment, VWAP chase block, RVOL, RSI, 10AM start
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.8-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.5.8-1
 - Intraday replay backtest: pick symbol + date, rerun current logic on historical bars
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.7-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.5.7-1
 - Intraday: date-range train/test dataset export (JSON/CSV) for model tuning
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.6-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.5.6-1
 - Intraday accuracy: stricter entry filters, wider stops, one trade/symbol/day, no late entries
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.5-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.5.5-1
 - Intraday: prominent Download JSON/CSV buttons (top bar + header + history section)
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.4-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.5.4-1
 - Intraday: download report (JSON/CSV) with trade history, factor analysis, and tuning insights
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.3-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.5.3-1
 - Intraday: scans only during US market hours; countdown banner to close/open
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.2-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.5.2-1
 - Intraday cards: collapsible rows — click symbol to expand trade details
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.5.1-1
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.2.6-1
+- Dynamic trading-day window (1-10); issue target only if achievable within 10 sessions
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.2.5-1
+- Auto-fetch company names for wishlist symbols added without search pick
+* Wed Jun 24 2026 Shizu <admin@localhost> - 1.2.4-1
+- Market signal box shows why HOLD/BUY/SELL and upper/lower price targets
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.5.1-1
 - Intraday: per-trade Why this trade reasons; expanded Help technology section
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.5.0-1
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.5.0-1
 - US Intraday tab: separate watchlist, VWAP/structure model, today trades on top, intraday history
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.4.1-1
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.4.1-1
 - Fix API crash: restore get_cached_signals removed in 1.4.0; non-blocking startup scan
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.4.0-1
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.4.0-1
 - My Holdings tab: sell/hold advice for owned stocks with avg cost and P&L
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.3.1-1
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.3.1-1
 - Purge closed trade cards after 30 days; keep lifetime aggregate stats
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.2.3-1
+- Bulk import skips existing symbols and adds the rest without failing
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.2.2-1
+- Unified wishlist input: paste comma-separated symbol lists in one field
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.2.1-1
+- Fix mobile toolbar: always show US/India market switch and layout toggle
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.2.0-1
+- Bulk wishlist import (comma-separated symbols) and mobile/desktop layout toggle
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.1.4-1
+- Fix wishlist not showing due to cached API responses missing market field
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.1.3-1
+- Fix India/US market tab switching and stock selection in dashboard
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.1.2-1
+- Fix wishlist DB migration for dual US/IN markets (legacy unique index)
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.1.1-1
+- Add scripts/upgrade.sh for safe one-command deploys and HTTPS restore
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.1.0-1
+- Dual US/Indian wishlists, per-market history, version footer and disclaimer
+* Tue Jun 23 2026 Shizu <admin@localhost> - 1.0.0-1
+- Initial RPM release; persistent data in /var/lib/market-monitor
 * Mon Jun 23 2025 Shizu <admin@localhost> - 1.3.0-1
 - History pagination (30/page), SQL stats, deduped quotes for open trades
 * Mon Jun 23 2025 Shizu <admin@localhost> - 1.2.9-1
@@ -167,29 +193,3 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 - Fix history target detection: timezone-safe dates and live price before daily bars
 * Mon Jun 23 2025 Shizu <admin@localhost> - 1.2.7-1
 - Fix history target detection with live price; show company names on history cards
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.2.6-1
-- Dynamic trading-day window (1-10); issue target only if achievable within 10 sessions
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.2.5-1
-- Auto-fetch company names for wishlist symbols added without search pick
-* Tue Jun 24 2026 Shizu <admin@localhost> - 1.2.4-1
-- Market signal box shows why HOLD/BUY/SELL and upper/lower price targets
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.2.3-1
-- Bulk import skips existing symbols and adds the rest without failing
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.2.2-1
-- Unified wishlist input: paste comma-separated symbol lists in one field
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.2.1-1
-- Fix mobile toolbar: always show US/India market switch and layout toggle
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.2.0-1
-- Bulk wishlist import (comma-separated symbols) and mobile/desktop layout toggle
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.1.4-1
-- Fix wishlist not showing due to cached API responses missing market field
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.1.3-1
-- Fix India/US market tab switching and stock selection in dashboard
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.1.2-1
-- Fix wishlist DB migration for dual US/IN markets (legacy unique index)
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.1.1-1
-- Add scripts/upgrade.sh for safe one-command deploys and HTTPS restore
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.1.0-1
-- Dual US/Indian wishlists, per-market history, version footer and disclaimer
-* Mon Jun 23 2026 Shizu <admin@localhost> - 1.0.0-1
-- Initial RPM release; persistent data in /var/lib/market-monitor

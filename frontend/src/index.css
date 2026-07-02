@@ -2197,6 +2197,60 @@ input {
   font-size: 0.78rem;
 }
 
+.intraday-backtest-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.intraday-backtest-progress-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 12px;
+  font-size: 0.84rem;
+  color: var(--text);
+}
+
+.intraday-backtest-progress-eta {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.intraday-backtest-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.intraday-backtest-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  transition: width 0.35s ease;
+}
+
+.intraday-backtest-day-done {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #22c55e;
+}
+
+.intraday-backtest-day-running {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #3b82f6;
+}
+
+.intraday-backtest-row-active {
+  background: rgba(59, 130, 246, 0.1);
+}
+
 .win-text {
   color: #22c55e;
 }

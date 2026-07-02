@@ -43,6 +43,10 @@ def _parse_trade_date(date_str: str) -> date:
     return datetime.strptime(date_str, "%Y-%m-%d").date()
 
 
+def parse_trade_date(date_str: str) -> date:
+    return _parse_trade_date(date_str)
+
+
 def iter_us_trading_days(start: date, end: date) -> list[date]:
     if start > end:
         raise ValueError("Start date must be on or before end date")

@@ -22,7 +22,13 @@ from app.services.intraday_monitor import (
     scan_intraday_watchlist,
 )
 from app.services.intraday_report import build_intraday_report, report_filename, report_to_csv
-from app.services.intraday_backtest import backtest_intraday, backtest_intraday_range
+from app.services.intraday_backtest import (
+    MAX_RANGE_TRADING_DAYS,
+    backtest_intraday,
+    backtest_intraday_range,
+    iter_us_trading_days,
+    parse_trade_date,
+)
 from app.services.market import validate_market_symbol
 from app.services.search import resolve_symbol_name
 from app.services.us_market_hours import market_status_to_dict
@@ -219,6 +225,33 @@ def download_intraday_report(
         media_type="application/json; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/trading-days")
+def get_trading_days(
+    start: str = Query(..., description="Start date YYYY-MM-DD"),
+    end: str = Query(..., description="End date YYYY-MM-DD"),
+):
+    """List US trading days in a date range (for range replay progress)."""
+    try:
+        start_d = parse_trade_date(start)
+        end_d = parse_trade_date(end)
+        days = iter_us_trading_days(start_d, end_d)
+        if not days:
+            raise ValueError("No US trading days in this date range")
+        if len(days) > MAX_RANGE_TRADING_DAYS:
+            raise ValueError(
+                f"Range spans {len(days)} trading days; maximum is {MAX_RANGE_TRADING_DAYS}. "
+                "Use a shorter range."
+            )
+        return {
+            "start_date": start,
+            "end_date": end,
+            "trading_days": [d.isoformat() for d in days],
+            "count": len(days),
+        }
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
 
 
 @router.get("/backtest")

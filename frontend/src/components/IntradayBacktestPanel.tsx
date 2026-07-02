@@ -6,6 +6,13 @@ type Props = {
   onError?: (message: string) => void;
 };
 
+type RangeProgress = {
+  total: number;
+  done: number;
+  current: string | null;
+  etaSec: number | null;
+};
+
 function statusLabel(status: string) {
   switch (status) {
     case "target_hit":
@@ -26,7 +33,64 @@ function statusLabel(status: string) {
 function isRangeResult(
   res: IntradayBacktestResult | IntradayBacktestRangeResult
 ): res is IntradayBacktestRangeResult {
-  return res.replay_type === "shizu_intraday_backtest_range";
+  return "replay_type" in res && res.replay_type === "shizu_intraday_backtest_range";
+}
+
+function formatEta(seconds: number | null): string {
+  if (seconds == null || !Number.isFinite(seconds)) return "";
+  if (seconds < 5) return "almost done";
+  if (seconds < 60) return `~${Math.ceil(seconds)}s left`;
+  const mins = Math.ceil(seconds / 60);
+  return mins === 1 ? "~1 min left" : `~${mins} min left`;
+}
+
+function buildRangeResult(
+  symbol: string,
+  startDate: string,
+  endDate: string,
+  results: IntradayBacktestResult[]
+): IntradayBacktestRangeResult {
+  const traded = results.filter((r) => r.traded);
+  const wins = traded.filter((r) => r.outcome?.success);
+  const losses = traded.filter((r) => !r.outcome?.success);
+  const noTrade = results.filter((r) => !r.traded);
+  const totalPct = traded.reduce((sum, r) => sum + (r.outcome?.result_pct ?? 0), 0);
+
+  return {
+    replay_type: "shizu_intraday_backtest_range",
+    symbol,
+    start_date: startDate,
+    end_date: endDate,
+    trading_days: results.length,
+    trades: traded.length,
+    wins: wins.length,
+    losses: losses.length,
+    no_trade_days: noTrade.length,
+    win_rate: traded.length ? Math.round((wins.length / traded.length) * 1000) / 10 : 0,
+    total_result_pct: Math.round(totalPct * 100) / 100,
+    avg_result_pct: traded.length ? Math.round((totalPct / traded.length) * 100) / 100 : 0,
+    results,
+  };
+}
+
+function RangeProgressBar({ progress }: { progress: RangeProgress }) {
+  const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  const eta = formatEta(progress.etaSec);
+
+  return (
+    <div className="intraday-backtest-progress">
+      <div className="intraday-backtest-progress-header">
+        <span>
+          {progress.done} of {progress.total} trading day{progress.total === 1 ? "" : "s"} done
+          {progress.current ? ` · replaying ${progress.current}` : progress.done === progress.total ? " · complete" : ""}
+        </span>
+        {eta && <span className="intraday-backtest-progress-eta">{eta}</span>}
+      </div>
+      <div className="intraday-backtest-progress-track" aria-hidden>
+        <div className="intraday-backtest-progress-fill" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
 }
 
 function SingleDayResult({ result }: { result: IntradayBacktestResult }) {
@@ -98,98 +162,128 @@ function SingleDayResult({ result }: { result: IntradayBacktestResult }) {
   );
 }
 
-function RangeResult({ result }: { result: IntradayBacktestRangeResult }) {
+function RangeResult({
+  result,
+  progress,
+}: {
+  result: IntradayBacktestRangeResult;
+  progress?: RangeProgress | null;
+}) {
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const expanded = result.results.find((r) => r.date === expandedDate) ?? null;
+  const loading = progress != null && progress.done < progress.total;
 
   return (
     <div className="intraday-backtest-result">
-      <div className="intraday-backtest-range-summary">
-        <div className="intraday-backtest-range-stat">
-          <span>Trading days</span>
-          <strong>{result.trading_days}</strong>
-        </div>
-        <div className="intraday-backtest-range-stat">
-          <span>Trades</span>
-          <strong>{result.trades}</strong>
-        </div>
-        <div className="intraday-backtest-range-stat">
-          <span>Wins / losses</span>
-          <strong>
-            {result.wins} / {result.losses}
-          </strong>
-        </div>
-        <div className="intraday-backtest-range-stat">
-          <span>Win rate</span>
-          <strong>{result.win_rate}%</strong>
-        </div>
-        <div className="intraday-backtest-range-stat">
-          <span>Total P&amp;L</span>
-          <strong className={result.total_result_pct >= 0 ? "win-text" : "loss-text"}>
-            {result.total_result_pct > 0 ? "+" : ""}
-            {result.total_result_pct}%
-          </strong>
-        </div>
-        <div className="intraday-backtest-range-stat">
-          <span>Avg / trade</span>
-          <strong>
-            {result.avg_result_pct > 0 ? "+" : ""}
-            {result.avg_result_pct}%
-          </strong>
-        </div>
-      </div>
+      {progress && progress.total > 1 && <RangeProgressBar progress={progress} />}
 
-      <p className="intraday-dataset-meta">
-        {result.start_date} → {result.end_date} · {result.no_trade_days} day(s) with no trade
-      </p>
+      {!loading && (
+        <div className="intraday-backtest-range-summary">
+          <div className="intraday-backtest-range-stat">
+            <span>Trading days</span>
+            <strong>{result.trading_days}</strong>
+          </div>
+          <div className="intraday-backtest-range-stat">
+            <span>Trades</span>
+            <strong>{result.trades}</strong>
+          </div>
+          <div className="intraday-backtest-range-stat">
+            <span>Wins / losses</span>
+            <strong>
+              {result.wins} / {result.losses}
+            </strong>
+          </div>
+          <div className="intraday-backtest-range-stat">
+            <span>Win rate</span>
+            <strong>{result.win_rate}%</strong>
+          </div>
+          <div className="intraday-backtest-range-stat">
+            <span>Total P&amp;L</span>
+            <strong className={result.total_result_pct >= 0 ? "win-text" : "loss-text"}>
+              {result.total_result_pct > 0 ? "+" : ""}
+              {result.total_result_pct}%
+            </strong>
+          </div>
+          <div className="intraday-backtest-range-stat">
+            <span>Avg / trade</span>
+            <strong>
+              {result.avg_result_pct > 0 ? "+" : ""}
+              {result.avg_result_pct}%
+            </strong>
+          </div>
+        </div>
+      )}
 
-      <div className="intraday-backtest-range-table-wrap">
-        <table className="intraday-backtest-range-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Result</th>
-              <th>P&amp;L</th>
-              <th>Entry</th>
-              <th>Direction</th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.results.map((day) => (
-              <tr
-                key={day.date}
-                className={expandedDate === day.date ? "expanded" : ""}
-                onClick={() => setExpandedDate(expandedDate === day.date ? null : day.date)}
-              >
-                <td>{day.date}</td>
-                <td>
-                  {!day.traded ? (
-                    <span className="intraday-backtest-muted">No trade</span>
-                  ) : (
-                    <span className={`intraday-backtest-badge ${day.outcome?.success ? "win" : "loss"}`}>
-                      {statusLabel(day.outcome?.status ?? "")}
-                    </span>
-                  )}
-                </td>
-                <td>
-                  {day.traded ? (
-                    <strong className={day.outcome?.success ? "win-text" : "loss-text"}>
-                      {day.outcome && day.outcome.result_pct > 0 ? "+" : ""}
-                      {day.outcome?.result_pct}%
-                    </strong>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td>{day.entry_time_et ? day.entry_time_et.slice(11, 16) + " ET" : "—"}</td>
-                <td>{day.trade_plan?.direction ?? "—"}</td>
+      {!loading && (
+        <p className="intraday-dataset-meta">
+          {result.start_date} → {result.end_date} · {result.no_trade_days} day(s) with no trade
+        </p>
+      )}
+
+      {result.results.length > 0 && (
+        <div className="intraday-backtest-range-table-wrap">
+          <table className="intraday-backtest-range-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Result</th>
+                <th>P&amp;L</th>
+                <th>Entry</th>
+                <th>Direction</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {result.results.map((day) => (
+                <tr
+                  key={day.date}
+                  className={expandedDate === day.date ? "expanded" : ""}
+                  onClick={() => !loading && setExpandedDate(expandedDate === day.date ? null : day.date)}
+                >
+                  <td>{day.date}</td>
+                  <td>
+                    <span className="intraday-backtest-day-done">Done</span>
+                  </td>
+                  <td>
+                    {!day.traded ? (
+                      <span className="intraday-backtest-muted">No trade</span>
+                    ) : (
+                      <span className={`intraday-backtest-badge ${day.outcome?.success ? "win" : "loss"}`}>
+                        {statusLabel(day.outcome?.status ?? "")}
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {day.traded ? (
+                      <strong className={day.outcome?.success ? "win-text" : "loss-text"}>
+                        {day.outcome && day.outcome.result_pct > 0 ? "+" : ""}
+                        {day.outcome?.result_pct}%
+                      </strong>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td>{day.entry_time_et ? day.entry_time_et.slice(11, 16) + " ET" : "—"}</td>
+                  <td>{day.trade_plan?.direction ?? "—"}</td>
+                </tr>
+              ))}
+              {loading && progress?.current && (
+                <tr className="intraday-backtest-row-active">
+                  <td>{progress.current}</td>
+                  <td>
+                    <span className="intraday-backtest-day-running">Running…</span>
+                  </td>
+                  <td colSpan={4} className="intraday-backtest-muted">
+                    Replaying intraday bars
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {expanded && (
+      {expanded && !loading && (
         <div className="intraday-backtest-range-detail">
           <strong>{expanded.date}</strong>
           <SingleDayResult result={expanded} />
@@ -205,6 +299,57 @@ export default function IntradayBacktestPanel({ watchlistSymbols, onError }: Pro
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<IntradayBacktestResult | IntradayBacktestRangeResult | null>(null);
+  const [rangeProgress, setRangeProgress] = useState<RangeProgress | null>(null);
+
+  const isRange = Boolean(endDate && endDate !== startDate);
+
+  const runRangeReplay = async (sym: string) => {
+    const schedule = await api.getIntradayTradingDays(startDate, endDate);
+    const days = schedule.trading_days;
+    const dayResults: IntradayBacktestResult[] = [];
+    const startedAt = Date.now();
+
+    setRangeProgress({ total: days.length, done: 0, current: days[0] ?? null, etaSec: null });
+    setResult(
+      buildRangeResult(sym, startDate, endDate, [])
+    );
+
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      setRangeProgress({
+        total: days.length,
+        done: i,
+        current: day,
+        etaSec: i > 0 ? ((Date.now() - startedAt) / i) * (days.length - i) / 1000 : null,
+      });
+
+      try {
+        const dayResult = await api.runIntradayBacktestDay(sym, day);
+        dayResults.push(dayResult);
+      } catch (e) {
+        dayResults.push({
+          symbol: sym,
+          date: day,
+          traded: false,
+          scans_run: 0,
+          message: e instanceof Error ? e.message : "Replay failed for this day",
+        });
+      }
+
+      const elapsedSec = (Date.now() - startedAt) / 1000;
+      const remaining = i + 1 < days.length ? (elapsedSec / (i + 1)) * (days.length - i - 1) : 0;
+
+      setRangeProgress({
+        total: days.length,
+        done: i + 1,
+        current: i + 1 < days.length ? days[i + 1] : null,
+        etaSec: remaining,
+      });
+      setResult(buildRangeResult(sym, startDate, endDate, [...dayResults]));
+    }
+
+    setRangeProgress(null);
+  };
 
   const runReplay = async () => {
     if (!symbol.trim() || !startDate) {
@@ -215,23 +360,27 @@ export default function IntradayBacktestPanel({ watchlistSymbols, onError }: Pro
       onError?.("End date must be on or after start date");
       return;
     }
+
     setLoading(true);
     setResult(null);
+    setRangeProgress(null);
+
+    const sym = symbol.trim().toUpperCase();
+
     try {
-      const res = await api.runIntradayBacktest(
-        symbol.trim().toUpperCase(),
-        startDate,
-        endDate || undefined
-      );
-      setResult(res);
+      if (isRange) {
+        await runRangeReplay(sym);
+      } else {
+        const res = await api.runIntradayBacktest(sym, startDate);
+        setResult(res);
+      }
     } catch (e) {
       onError?.(e instanceof Error ? e.message : "Backtest failed");
     } finally {
       setLoading(false);
+      setRangeProgress(null);
     }
   };
-
-  const isRange = Boolean(endDate && endDate !== startDate);
 
   return (
     <div className="intraday-backtest-bar">
@@ -275,12 +424,22 @@ export default function IntradayBacktestPanel({ watchlistSymbols, onError }: Pro
           onClick={runReplay}
           disabled={loading || !startDate}
         >
-          {loading ? "Replaying…" : isRange ? "Run range replay" : "Run replay"}
+          {loading
+            ? isRange && rangeProgress
+              ? `Day ${rangeProgress.done} of ${rangeProgress.total}…`
+              : "Replaying…"
+            : isRange
+              ? "Run range replay"
+              : "Run replay"}
         </button>
       </div>
 
       {result &&
-        (isRangeResult(result) ? <RangeResult result={result} /> : <SingleDayResult result={result} />)}
+        (isRangeResult(result) ? (
+          <RangeResult result={result} progress={rangeProgress} />
+        ) : (
+          <SingleDayResult result={result} />
+        ))}
     </div>
   );
 }

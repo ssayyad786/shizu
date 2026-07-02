@@ -194,6 +194,7 @@ export interface IntradayBacktestOutcome {
 }
 
 export interface IntradayBacktestResult {
+  replay_type?: "shizu_intraday_backtest";
   symbol: string;
   date: string;
   traded: boolean;
@@ -236,6 +237,13 @@ export interface IntradayBacktestRangeResult {
   avg_result_pct: number;
   results: IntradayBacktestResult[];
   notes?: string[];
+}
+
+export interface IntradayTradingDays {
+  start_date: string;
+  end_date: string;
+  trading_days: string[];
+  count: number;
 }
 
 export interface IntradayHistoryPage {
@@ -603,5 +611,13 @@ export const api = {
       params.set("end_date", endDate);
     }
     return request<IntradayBacktestResult | IntradayBacktestRangeResult>(`/intraday/backtest?${params}`);
+  },
+  getIntradayTradingDays: (start: string, end: string) => {
+    const params = new URLSearchParams({ start, end });
+    return request<IntradayTradingDays>(`/intraday/trading-days?${params}`);
+  },
+  runIntradayBacktestDay: (symbol: string, date: string) => {
+    const params = new URLSearchParams({ symbol: symbol.toUpperCase(), date });
+    return request<IntradayBacktestResult>(`/intraday/backtest?${params}`);
   },
 };
