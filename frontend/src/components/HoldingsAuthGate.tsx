@@ -5,7 +5,7 @@ import { HoldingsSession, setHoldingsSession } from "../holdingsAuth";
 type Mode = "login" | "register";
 
 interface Props {
-  onAuthenticated: (session: HoldingsSession) => void;
+  onAuthenticated: (session: HoldingsSession) => void | Promise<void>;
 }
 
 export default function HoldingsAuthGate({ onAuthenticated }: Props) {
@@ -49,7 +49,7 @@ export default function HoldingsAuthGate({ onAuthenticated }: Props) {
         profileId: res.profile_id,
       };
       setHoldingsSession(session);
-      onAuthenticated(session);
+      await onAuthenticated(session);
       await loadProfiles();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");

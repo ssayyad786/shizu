@@ -180,7 +180,8 @@ function HoldingCard({
 }
 
 export default function HoldingsPanel({ market, onMarketChange }: Props) {
-  const [session, setSession] = useState<HoldingsSession | null>(() => getHoldingsSession());
+  const [session, setSession] = useState<HoldingsSession | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [signals, setSignals] = useState<HoldingSignal[]>([]);
   const [sellAlerts, setSellAlerts] = useState<HoldingSignal[]>([]);
   const [lastScan, setLastScan] = useState<string | null>(null);
@@ -221,19 +222,45 @@ export default function HoldingsPanel({ market, onMarketChange }: Props) {
   );
 
   useEffect(() => {
+    const stored = getHoldingsSession();
+    if (!stored) {
+      setAuthChecked(true);
+      return;
+    }
+    api
+      .getHoldingProfileMe()
+      .then(() => setSession(stored))
+      .catch(() => setHoldingsSession(null))
+      .finally(() => setAuthChecked(true));
+  }, []);
+
+  useEffect(() => {
     if (!session) return;
     refresh();
     const interval = setInterval(() => refresh(true), 60000);
     return () => clearInterval(interval);
   }, [refresh, session]);
 
-  const handleAuthenticated = (s: HoldingsSession) => {
+  const handleAuthenticated = async (s: HoldingsSession) => {
     setHoldingsSession(s);
-    setSession(s);
     setError("");
+    try {
+      await api.getHoldingProfileMe();
+      setSession(s);
+    } catch (e) {
+      setHoldingsSession(null);
+      setSession(null);
+      setError(e instanceof Error ? e.message : "Sign-in failed — please try again");
+      throw e;
+    }
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    try {
+      await api.logoutHoldingProfile();
+    } catch {
+      /* clear local session even if logout request fails */
+    }
     setHoldingsSession(null);
     setSession(null);
     setSignals([]);
@@ -274,6 +301,10 @@ export default function HoldingsPanel({ market, onMarketChange }: Props) {
       setScanning(false);
     }
   };
+
+  if (!authChecked) {
+    return <div className="loading-hint">Checking session…</div>;
+  }
 
   if (!session) {
     return <HoldingsAuthGate onAuthenticated={handleAuthenticated} />;

@@ -127,6 +127,14 @@ RPM_FILE=$(ls ~/rpmbuild/RPMS/*/*.rpm 2>/dev/null | grep market-monitor | sort -
 log "Installing: $RPM_FILE"
 $PKG_MGR install -y "$RPM_FILE"
 
+# --- Nginx config (RPM %config(noreplace) may skip updates) ---
+NGINX_CONF="/etc/nginx/conf.d/market-monitor.conf"
+if [[ -f "$REPO_ROOT/packaging/rpm/nginx-market-monitor.conf" ]]; then
+  log "Updating nginx config..."
+  cp "$REPO_ROOT/packaging/rpm/nginx-market-monitor.conf" "$NGINX_CONF"
+  nginx -t
+fi
+
 # --- Services ---
 log "Restarting services..."
 systemctl daemon-reload

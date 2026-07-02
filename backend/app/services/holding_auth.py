@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from app.models import HoldingProfile
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,32}$")
 MIN_PASSWORD_LEN = 8
 TOKEN_TTL_DAYS = 30
+SESSION_COOKIE = "holdings_session"
 _bearer = HTTPBearer(auto_error=False)
 
 
@@ -50,7 +51,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def validate_username(username: str) -> str:
-    username = username.strip()
+    username = username.strip().lower()
     if not USERNAME_RE.match(username):
         raise ValueError("Username must be 3–32 characters: letters, numbers, underscore only")
     return username
@@ -94,13 +95,49 @@ def decode_access_token(token: str) -> dict:
     return payload
 
 
+def _token_from_request(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str | None:
+    if credentials is not None and credentials.credentials:
+        return credentials.credentials
+    return request.cookies.get(SESSION_COOKIE)
+
+
+def _cookie_secure() -> bool:
+    flag = os.environ.get("HOLDINGS_COOKIE_SECURE", "").strip().lower()
+    if flag in ("1", "true", "yes"):
+        return True
+    if flag in ("0", "false", "no"):
+        return False
+    return str(get_data_dir()) == "/var/lib/market-monitor"
+
+
+def set_auth_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        secure=_cookie_secure(),
+        samesite="lax",
+        max_age=TOKEN_TTL_DAYS * 24 * 3600,
+        path="/api/holdings",
+    )
+
+
+def clear_auth_cookie(response: Response) -> None:
+    response.delete_cookie(key=SESSION_COOKIE, path="/api/holdings")
+
+
 def get_current_holding_profile(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> HoldingProfile:
-    if credentials is None or not credentials.credentials:
+    token = _token_from_request(request, credentials)
+    if not token:
         raise HTTPException(401, "Sign in to access your holdings")
-    payload = decode_access_token(credentials.credentials)
+    payload = decode_access_token(token)
     profile_id = _profile_id_from_token(payload)
     if profile_id is None:
         raise HTTPException(401, "Invalid session")

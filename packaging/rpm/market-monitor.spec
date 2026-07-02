@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.7.2
+Version:        1.7.3
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,9 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Thu Jul 02 2026 Shizu <admin@localhost> - 1.7.3-1
+- Holdings login: HttpOnly session cookie (fixes nginx auth header), case-insensitive username
+- upgrade.sh always refreshes nginx config
 * Thu Jul 02 2026 Shizu <admin@localhost> - 1.7.2-1
 - Fix holdings login loop: JWT profile id parsing, nginx Authorization header, session refresh
 * Thu Jul 02 2026 Shizu <admin@localhost> - 1.7.1-1

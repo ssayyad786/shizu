@@ -493,6 +493,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 async function holdingsRequest<T>(path: string, options?: RequestInit): Promise<T> {
   const extra = (options?.headers as Record<string, string> | undefined) ?? {};
   return request<T>(path, {
+    credentials: "include",
     ...options,
     headers: { ...holdingsAuthHeaders(), ...extra },
   });
@@ -583,15 +584,19 @@ export const api = {
   registerHoldingProfile: (username: string, password: string) =>
     request<HoldingsAuthResponse>("/holdings/auth/register", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username: username.trim().toLowerCase(), password }),
     }),
   loginHoldingProfile: (username: string, password: string) =>
     request<HoldingsAuthResponse>("/holdings/auth/login", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username: username.trim().toLowerCase(), password }),
     }),
+  logoutHoldingProfile: () =>
+    request<{ ok: boolean }>("/holdings/auth/logout", { method: "POST", credentials: "include" }),
   getHoldingProfileMe: () => holdingsRequest<{ username: string; profile_id: number; created_at: string }>("/holdings/auth/me"),
   listHoldingProfiles: () => request<HoldingProfilePublic[]>("/holdings/profiles"),
   addHolding: (

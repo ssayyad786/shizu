@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import HoldingItem, HoldingProfile
 from app.services.holding_auth import (
+    clear_auth_cookie,
     create_access_token,
     get_current_holding_profile,
     hash_password,
+    set_auth_cookie,
     validate_password,
     validate_username,
     verify_password,
@@ -98,14 +100,14 @@ def _profile_item_query(db: Session, profile_id: int, symbol: str, market: str) 
 
 
 @router.post("/auth/register", response_model=AuthResponse, status_code=201)
-def register_profile(body: RegisterBody, db: Session = Depends(get_db)):
+def register_profile(body: RegisterBody, response: Response, db: Session = Depends(get_db)):
     try:
         username = validate_username(body.username)
         validate_password(body.password)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
-    if db.query(HoldingProfile).filter(HoldingProfile.username == username).first():
+    if db.query(HoldingProfile).filter(func.lower(HoldingProfile.username) == username).first():
         raise HTTPException(409, "Username already taken")
 
     profile = HoldingProfile(username=username, password_hash=hash_password(body.password))
@@ -116,29 +118,41 @@ def register_profile(body: RegisterBody, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(409, "Username already taken") from e
     db.refresh(profile)
+    token = create_access_token(profile)
+    set_auth_cookie(response, token)
     return AuthResponse(
-        token=create_access_token(profile),
+        token=token,
         username=profile.username,
         profile_id=profile.id,
     )
 
 
 @router.post("/auth/login", response_model=AuthResponse)
-def login_profile(body: LoginBody, db: Session = Depends(get_db)):
+def login_profile(body: LoginBody, response: Response, db: Session = Depends(get_db)):
     try:
         username = validate_username(body.username)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
-    profile = db.query(HoldingProfile).filter(HoldingProfile.username == username).first()
+    profile = db.query(HoldingProfile).filter(
+        func.lower(HoldingProfile.username) == username
+    ).first()
     if not profile or not verify_password(body.password, profile.password_hash):
         raise HTTPException(401, "Invalid username or password")
 
+    token = create_access_token(profile)
+    set_auth_cookie(response, token)
     return AuthResponse(
-        token=create_access_token(profile),
+        token=token,
         username=profile.username,
         profile_id=profile.id,
     )
+
+
+@router.post("/auth/logout")
+def logout_profile(response: Response):
+    clear_auth_cookie(response)
+    return {"ok": True}
 
 
 @router.get("/auth/me")
