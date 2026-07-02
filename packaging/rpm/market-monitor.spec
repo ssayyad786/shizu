@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.6.0
+Version:        1.6.1
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,9 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Thu Jul 02 2026 Shizu <admin@localhost> - 1.6.1-1
+- Fix gateway timeout: background wishlist scan, single-symbol scan on add
+- Replay backtest: optional date range across US trading days with summary table
 * Tue Jun 24 2026 Shizu <admin@localhost> - 1.6.0-1
 - Redesign intraday engine: ORB + VWAP playbook (15m range, volume, daily filter)
 * Tue Jun 24 2026 Shizu <admin@localhost> - 1.5.12-1

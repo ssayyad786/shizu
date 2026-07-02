@@ -117,7 +117,7 @@ def build_report(days: int = 5, workers: int = 6) -> dict:
         "generated_at": datetime.now(ET).isoformat(),
         "server": BASE,
         "app_version": app_version,
-        "model": "ORB + VWAP playbook (v1.6.0)",
+        "model": "ORB + VWAP playbook (v1.6.1)",
         "watchlist_count": len(symbols),
         "symbols": symbols,
         "trading_days": [d.isoformat() for d in trade_days],
