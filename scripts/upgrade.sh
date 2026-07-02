@@ -127,11 +127,22 @@ RPM_FILE=$(ls ~/rpmbuild/RPMS/*/*.rpm 2>/dev/null | grep market-monitor | sort -
 log "Installing: $RPM_FILE"
 $PKG_MGR install -y "$RPM_FILE"
 
-# --- Nginx config (RPM %config(noreplace) may skip updates) ---
+# --- Nginx config (never wipe certbot HTTPS — patch in place when SSL exists) ---
 NGINX_CONF="/etc/nginx/conf.d/market-monitor.conf"
-if [[ -f "$REPO_ROOT/packaging/rpm/nginx-market-monitor.conf" ]]; then
-  log "Updating nginx config..."
-  cp "$REPO_ROOT/packaging/rpm/nginx-market-monitor.conf" "$NGINX_CONF"
+NGINX_SRC="$REPO_ROOT/packaging/rpm/nginx-market-monitor.conf"
+if [[ -f "$NGINX_SRC" ]]; then
+  if [[ -d "/etc/letsencrypt/live/${DOMAIN}" || -f "/etc/letsencrypt/renewal/${DOMAIN}.conf" ]]; then
+    log "SSL cert found — patching nginx (keeping HTTPS config)..."
+    if [[ ! -f "$NGINX_CONF" ]]; then
+      cp "$NGINX_SRC" "$NGINX_CONF"
+    fi
+    if ! grep -q 'proxy_set_header Authorization' "$NGINX_CONF"; then
+      sed -i '/proxy_set_header X-Forwarded-Proto/a\        proxy_set_header Authorization $http_authorization;' "$NGINX_CONF"
+    fi
+  else
+    log "Updating nginx config (HTTP only)..."
+    cp "$NGINX_SRC" "$NGINX_CONF"
+  fi
   nginx -t
 fi
 

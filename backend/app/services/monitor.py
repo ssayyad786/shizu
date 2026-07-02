@@ -55,12 +55,8 @@ def remove_cached_signal(symbol: str, market: str) -> None:
     _latest_signals.pop(_cache_key(symbol, market), None)
 
 
-def _holding_cache_key(profile_id: int, symbol: str, market: str) -> str:
-    return f"{profile_id}:{market.upper()}:{symbol.upper()}"
-
-
-def remove_cached_holding(symbol: str, market: str, profile_id: int) -> None:
-    _holdings_signals.pop(_holding_cache_key(profile_id, symbol, market), None)
+def remove_cached_holding(symbol: str, market: str) -> None:
+    _holdings_signals.pop(_cache_key(symbol, market), None)
 
 
 def get_cached_signals(market: str | None = None) -> tuple[list[dict], datetime | None]:
@@ -70,16 +66,9 @@ def get_cached_signals(market: str | None = None) -> tuple[list[dict], datetime 
     return signals, _last_scan
 
 
-def get_cached_holdings_signals(
-    market: str | None = None, profile_id: int | None = None
-) -> tuple[list[dict], datetime | None]:
-    prefix = f"{profile_id}:" if profile_id is not None else None
-    signals = []
-    for key, payload in _holdings_signals.items():
-        if prefix is not None and not key.startswith(prefix):
-            continue
-        signals.append(payload)
-    signals.sort(
+def get_cached_holdings_signals(market: str | None = None) -> tuple[list[dict], datetime | None]:
+    signals = sorted(
+        _holdings_signals.values(),
         key=lambda s: (
             0 if s.get("advice", {}).get("recommendation") == "SELL" else 1,
             -abs(s.get("score", 0)),
@@ -263,7 +252,7 @@ def scan_holding(item: HoldingItem, db: Session | None = None) -> dict:
 
     result = signal_to_holding_payload(signal, item)
 
-    _holdings_signals[_holding_cache_key(item.profile_id, symbol, market)] = result
+    _holdings_signals[_cache_key(symbol, market)] = result
 
     return result
 
@@ -289,7 +278,7 @@ def scan_holdings(db: Session | None = None) -> list[dict]:
 
         items = db.query(HoldingItem).order_by(HoldingItem.market, HoldingItem.symbol).all()
 
-        valid_keys = {_holding_cache_key(i.profile_id, i.symbol, i.market) for i in items}
+        valid_keys = {_cache_key(i.symbol, i.market) for i in items}
 
         for key in list(_holdings_signals.keys()):
             if key not in valid_keys:
@@ -397,7 +386,7 @@ def scan_holdings(db: Session | None = None) -> list[dict]:
 
                 }
 
-                _holdings_signals[_holding_cache_key(item.profile_id, item.symbol, item.market)] = failed
+                _holdings_signals[_cache_key(item.symbol, item.market)] = failed
 
                 results.append(failed)
 
@@ -409,35 +398,4 @@ def scan_holdings(db: Session | None = None) -> list[dict]:
 
         if close_db:
 
-            db.close()
-
-
-def scan_holdings_for_profile(profile_id: int, db: Session | None = None) -> list[dict]:
-    close_db = False
-    if db is None:
-        db = SessionLocal()
-        close_db = True
-    try:
-        prefix = f"{profile_id}:"
-        items = (
-            db.query(HoldingItem)
-            .filter(HoldingItem.profile_id == profile_id)
-            .order_by(HoldingItem.market, HoldingItem.symbol)
-            .all()
-        )
-        valid_keys = {_holding_cache_key(profile_id, i.symbol, i.market) for i in items}
-        for key in list(_holdings_signals.keys()):
-            if key.startswith(prefix) and key not in valid_keys:
-                del _holdings_signals[key]
-        results = []
-        for item in items:
-            try:
-                results.append(scan_holding(item, db=db))
-            except Exception as e:
-                logger.warning("Failed to scan holding %s (%s): %s", item.symbol, item.market, e)
-        global _last_holdings_scan
-        _last_holdings_scan = datetime.utcnow()
-        return results
-    finally:
-        if close_db:
             db.close()
