@@ -3,6 +3,7 @@ import {
   api,
   IntradayHistoryRecord,
   IntradayLiveSignal,
+  IntradayScanSummary,
   IntradayStats,
   IntradayWatchlistItem,
   Market,
@@ -70,6 +71,95 @@ function UsMarketBanner({ market }: { market: UsMarketStatus }) {
   );
 }
 
+type ScanState = NonNullable<IntradayLiveSignal["scan_state"]>;
+
+function formatScanAge(seconds: number | null | undefined): string {
+  if (seconds == null) return "never";
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  return `${Math.floor(seconds / 3600)}h ago`;
+}
+
+function scanStateMeta(state: ScanState | undefined): { label: string; className: string } {
+  switch (state) {
+    case "fresh":
+      return { label: "Scanned", className: "scan-fresh" };
+    case "stale":
+      return { label: "Stale", className: "scan-stale" };
+    case "failed":
+      return { label: "Failed", className: "scan-failed" };
+    case "cached":
+      return { label: "Last session", className: "scan-cached" };
+    default:
+      return { label: "Not scanned", className: "scan-never" };
+  }
+}
+
+function ScanCoverageBar({
+  summary,
+  lastScan,
+  marketOpen,
+}: {
+  summary: IntradayScanSummary | null;
+  lastScan: string | null;
+  marketOpen: boolean;
+}) {
+  if (!summary || summary.watchlist_count === 0) return null;
+
+  const issues = summary.stale_count + summary.failed_count + summary.never_count;
+  const lastLabel = lastScan ? new Date(lastScan).toLocaleTimeString() : "—";
+
+  return (
+    <div className={`intraday-scan-health${issues > 0 ? " has-issues" : ""}`}>
+      <div className="intraday-scan-health-main">
+        <span className="intraday-scan-health-title">Scan coverage</span>
+        <span className="intraday-scan-health-counts">
+          <span className="scan-dot scan-fresh" />
+          {summary.fresh_count} fresh
+          {summary.stale_count > 0 && (
+            <>
+              {" · "}
+              <span className="scan-dot scan-stale" />
+              {summary.stale_count} stale
+            </>
+          )}
+          {summary.failed_count > 0 && (
+            <>
+              {" · "}
+              <span className="scan-dot scan-failed" />
+              {summary.failed_count} failed
+            </>
+          )}
+          {summary.never_count > 0 && (
+            <>
+              {" · "}
+              <span className="scan-dot scan-never" />
+              {summary.never_count} not scanned
+            </>
+          )}
+          {summary.cached_count > 0 && !marketOpen && (
+            <> · {summary.cached_count} from last session</>
+          )}
+        </span>
+      </div>
+      <p className="intraday-scan-health-meta">
+        {summary.scanned_count}/{summary.watchlist_count} symbols scanned
+        {marketOpen ? (
+          <>
+            {" "}
+            · last run <strong>{lastLabel}</strong> · every <strong>{summary.interval_minutes} min</strong>
+          </>
+        ) : (
+          <> · market closed — scans paused until US session opens</>
+        )}
+        {issues > 0 && marketOpen && (
+          <> · HOLD / 0% usually means no setup yet, not that scanning stopped</>
+        )}
+      </p>
+    </div>
+  );
+}
+
 function statusLabel(record: IntradayHistoryRecord) {
   switch (record.status) {
     case "target_hit":
@@ -100,6 +190,7 @@ const SetupCard = memo(function SetupCard({
   const plan = signal.trade_plan;
   const isLong = signal.direction === "LONG";
   const tone = isLong ? "long" : signal.direction === "SHORT" ? "short" : "hold";
+  const scanMeta = scanStateMeta(signal.scan_state);
 
   return (
     <article className={`intraday-card ${tone} ${open ? "expanded" : "collapsed"}`}>
@@ -114,6 +205,13 @@ const SetupCard = memo(function SetupCard({
         </span>
         <div className="intraday-card-summary">
           <span className="intraday-symbol">{signal.symbol}</span>
+          <span className={`intraday-scan-pill ${scanMeta.className}`} title={signal.summary}>
+            <span className={`scan-dot ${scanMeta.className}`} />
+            {scanMeta.label}
+            {signal.scan_age_sec != null && signal.scan_state === "fresh" && (
+              <span className="intraday-scan-age"> {formatScanAge(signal.scan_age_sec)}</span>
+            )}
+          </span>
           <span className={`intraday-dir-pill ${tone}`}>{signal.direction}</span>
           <span className="intraday-summary-stat">{signal.confidence}%</span>
           {plan && (
@@ -146,6 +244,12 @@ const SetupCard = memo(function SetupCard({
               VWAP {fmt(signal.vwap)} · RVOL {signal.rvol ?? "—"}× · Daily {signal.daily_trend}
             </p>
           )}
+          <p className="intraday-scan-detail">
+            Scan: <span className={scanMeta.className}>{scanMeta.label}</span>
+            {signal.scanned_at
+              ? ` at ${new Date(signal.scanned_at).toLocaleString()}`
+              : " — not run yet for this symbol"}
+          </p>
           <p className="intraday-summary">{signal.summary}</p>
           <WhyTradeBlock
             headline={signal.why_headline}
@@ -296,6 +400,7 @@ export default function IntradayPanel() {
   const [stats, setStats] = useState<IntradayStats | null>(null);
   const [market, setMarket] = useState<UsMarketStatus | null>(null);
   const [lastScan, setLastScan] = useState<string | null>(null);
+  const [scanSummary, setScanSummary] = useState<IntradayScanSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
@@ -315,6 +420,7 @@ export default function IntradayPanel() {
       setSignals(sig.signals);
       setTodaySetups(sig.today_setups);
       setLastScan(sig.last_scan);
+      setScanSummary(sig.scan_summary);
       setTodayTrades(hist.today_trades);
       setHistory(hist.signals);
       setStats(hist.stats);
@@ -329,7 +435,7 @@ export default function IntradayPanel() {
 
   useEffect(() => {
     refresh({ refreshPrices: true });
-    const interval = setInterval(() => refresh({ silent: true, refreshPrices: false }), 90000);
+    const interval = setInterval(() => refresh({ silent: true, refreshPrices: false }), 60000);
     return () => clearInterval(interval);
   }, [refresh]);
 
@@ -370,7 +476,12 @@ export default function IntradayPanel() {
     if (!market?.is_open) return;
     setScanning(true);
     try {
-      await api.triggerIntradayScan();
+      const result = await api.triggerIntradayScan();
+      setSignals(result.signals);
+      setTodaySetups(result.today_setups);
+      setLastScan(result.last_scan ?? null);
+      setScanSummary(result.scan_summary ?? null);
+      setMarket(result.market);
       await refresh({ silent: true, refreshPrices: true });
     } finally {
       setScanning(false);
@@ -412,6 +523,8 @@ export default function IntradayPanel() {
       {error && <div className="error content-error">{error}</div>}
 
       {stats && <StatsBar stats={stats} />}
+
+      <ScanCoverageBar summary={scanSummary} lastScan={lastScan} marketOpen={marketOpen} />
 
       <section className="intraday-section">
         <h2 className="section-title">Intraday watchlist (US)</h2>
@@ -462,13 +575,17 @@ export default function IntradayPanel() {
 
       {loading ? (
         <div className="loading-hint">Loading intraday data…</div>
-      ) : signals.length === 0 ? (
+      ) : watchlist.length === 0 ? (
         <div className="empty-state">
           <p>Add US stocks to the intraday list to start scanning 5m / 15m charts.</p>
         </div>
       ) : (
         <section className="intraday-section">
           <h2 className="section-title">Live signals</h2>
+          <p className="intraday-today-note">
+            Each symbol is scanned every 2 minutes while the US market is open. Check the scan pill on
+            each row — green means data is fresh.
+          </p>
           <div className="intraday-card-list">
             {signals.map((s) => (
               <SetupCard key={s.symbol} signal={s} />

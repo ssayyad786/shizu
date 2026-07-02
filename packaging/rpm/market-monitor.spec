@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.6.1
+Version:        1.6.2
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,10 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Thu Jul 02 2026 Shizu <admin@localhost> - 1.6.2-1
+- Intraday: per-symbol scan status pills and coverage bar (fresh/stale/failed)
+- Replay backtest: stop button, range limits, lighter payloads, Yahoo frame cache
+- History tab: intraday-style collapsible cards grouped by date
 * Thu Jul 02 2026 Shizu <admin@localhost> - 1.6.1-1
 - Fix gateway timeout: background wishlist scan, single-symbol scan on add
 - Replay backtest: optional date range across US trading days with summary table

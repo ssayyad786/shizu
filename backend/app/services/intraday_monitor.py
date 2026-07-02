@@ -1,7 +1,7 @@
 """Scan intraday watchlist and cache signals."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -10,9 +10,12 @@ from app.models import IntradayWatchlistItem
 from app.services.intraday_history import save_intraday_signal, signal_to_api_dict, update_open_intraday
 from app.services.intraday_signals import analyze_intraday
 from app.services.market_data import fetch_history
-from app.services.us_market_hours import get_us_market_status
+from app.services.us_market_hours import get_us_market_status, market_status_to_dict
 
 logger = logging.getLogger(__name__)
+
+SCAN_INTERVAL_MINUTES = 2
+STALE_AFTER_SECONDS = SCAN_INTERVAL_MINUTES * 60 * 3
 
 _intraday_signals: dict[str, dict] = {}
 _last_intraday_scan: datetime | None = None
@@ -102,3 +105,119 @@ def scan_intraday_watchlist(db: Session | None = None) -> list[dict]:
     finally:
         if close_db:
             db.close()
+
+
+def _parse_scanned_at(scanned_at: str | None) -> datetime | None:
+    if not scanned_at:
+        return None
+    try:
+        dt = datetime.fromisoformat(scanned_at.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        return None
+
+
+def _scan_age_seconds(scanned_at: str | None) -> int | None:
+    dt = _parse_scanned_at(scanned_at)
+    if dt is None:
+        return None
+    return max(0, int((datetime.now(timezone.utc) - dt).total_seconds()))
+
+
+def _is_scan_failed(signal: dict | None) -> bool:
+    if not signal:
+        return False
+    summary = signal.get("summary") or ""
+    return summary.startswith("Scan failed")
+
+
+def classify_scan_state(signal: dict | None, market_open: bool) -> str:
+    """fresh | stale | failed | never | cached"""
+    if signal is None:
+        return "never"
+    if _is_scan_failed(signal):
+        return "failed"
+    age = _scan_age_seconds(signal.get("scanned_at"))
+    if age is None:
+        return "never"
+    if not market_open:
+        return "cached"
+    if age > STALE_AFTER_SECONDS:
+        return "stale"
+    return "fresh"
+
+
+def build_intraday_signals_payload(db: Session) -> dict:
+    """Merge watchlist with cached scans and attach per-symbol scan health."""
+    market = market_status_to_dict()
+    items = db.query(IntradayWatchlistItem).order_by(IntradayWatchlistItem.symbol).all()
+    cached, last_scan = get_cached_intraday_signals()
+    cache_by_symbol = {s["symbol"].upper(): s for s in cached}
+
+    counts = {"fresh": 0, "stale": 0, "failed": 0, "never": 0, "cached": 0}
+    signals: list[dict] = []
+
+    for item in items:
+        sym = item.symbol.upper()
+        cached_signal = cache_by_symbol.get(sym)
+        state = classify_scan_state(cached_signal, market["is_open"])
+        counts[state] += 1
+
+        if cached_signal:
+            row = {
+                **cached_signal,
+                "scan_state": state,
+                "scan_age_sec": _scan_age_seconds(cached_signal.get("scanned_at")),
+            }
+        else:
+            row = {
+                "symbol": sym,
+                "name": item.name,
+                "direction": "HOLD",
+                "confidence": 0,
+                "price": 0,
+                "score": 0,
+                "summary": (
+                    "Not scanned yet — next run within ~2 minutes while market is open."
+                    if market["is_open"]
+                    else "Market closed — scans resume at next US session open."
+                ),
+                "actionable": False,
+                "reasoning": [],
+                "indicators": [],
+                "trade_plan": None,
+                "scanned_at": None,
+                "scan_state": state,
+                "scan_age_sec": None,
+            }
+        signals.append(row)
+
+    signals.sort(
+        key=lambda s: (
+            0 if s.get("actionable") else 1,
+            {"failed": 0, "never": 1, "stale": 2, "fresh": 3, "cached": 4}.get(s.get("scan_state", "never"), 5),
+            -abs(s.get("score", 0)),
+            s.get("symbol", ""),
+        )
+    )
+
+    return {
+        "signals": signals,
+        "today_setups": [s for s in signals if s.get("actionable")],
+        "last_scan": last_scan.isoformat() if last_scan else None,
+        "market": market,
+        "scan_summary": {
+            "watchlist_count": len(items),
+            "scanned_count": len(items) - counts["never"],
+            "fresh_count": counts["fresh"],
+            "stale_count": counts["stale"],
+            "failed_count": counts["failed"],
+            "never_count": counts["never"],
+            "cached_count": counts["cached"],
+            "interval_minutes": SCAN_INTERVAL_MINUTES,
+            "stale_after_minutes": STALE_AFTER_SECONDS // 60,
+            "market_open": market["is_open"],
+        },
+    }

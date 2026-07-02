@@ -102,6 +102,7 @@ export interface IntradayTradeReason {
 
 export interface IntradayLiveSignal {
   symbol: string;
+  name?: string | null;
   direction: string;
   confidence: number;
   price: number;
@@ -116,7 +117,22 @@ export interface IntradayLiveSignal {
   daily_trend?: string | null;
   indicators: IndicatorSignal[];
   trade_plan?: IntradayTradePlan | null;
-  scanned_at?: string;
+  scanned_at?: string | null;
+  scan_state?: "fresh" | "stale" | "failed" | "never" | "cached";
+  scan_age_sec?: number | null;
+}
+
+export interface IntradayScanSummary {
+  watchlist_count: number;
+  scanned_count: number;
+  fresh_count: number;
+  stale_count: number;
+  failed_count: number;
+  never_count: number;
+  cached_count: number;
+  interval_minutes: number;
+  stale_after_minutes: number;
+  market_open: boolean;
 }
 
 export interface IntradayHistoryRecord {
@@ -590,6 +606,7 @@ export const api = {
       today_setups: IntradayLiveSignal[];
       last_scan: string | null;
       market: UsMarketStatus;
+      scan_summary: IntradayScanSummary;
     }>("/intraday/signals"),
   getIntradayMarketStatus: () => request<UsMarketStatus>("/intraday/market-status"),
   triggerIntradayScan: () =>
@@ -599,6 +616,8 @@ export const api = {
       today_setups: IntradayLiveSignal[];
       signals: IntradayLiveSignal[];
       market: UsMarketStatus;
+      last_scan?: string | null;
+      scan_summary?: IntradayScanSummary;
     }>("/intraday/scan", { method: "POST" }),
   getIntradayHistory: (opts?: { limit?: number; offset?: number; refresh?: boolean }) => {
     const params = new URLSearchParams();

@@ -17,6 +17,7 @@ from app.services.intraday_history import (
     update_open_intraday,
 )
 from app.services.intraday_monitor import (
+    build_intraday_signals_payload,
     get_cached_intraday_signals,
     remove_cached_intraday,
     scan_intraday_watchlist,
@@ -146,38 +147,34 @@ def get_market_status():
 
 
 @router.get("/signals")
-def get_intraday_signals():
-    signals, last_scan = get_cached_intraday_signals()
-    today_setups = [s for s in signals if s.get("actionable")]
-    return {
-        "signals": signals,
-        "today_setups": today_setups,
-        "last_scan": last_scan.isoformat() if last_scan else None,
-        "market": market_status_to_dict(),
-    }
+def get_intraday_signals(db: Session = Depends(get_db)):
+    return build_intraday_signals_payload(db)
 
 
 @router.post("/scan")
-def trigger_intraday_scan():
+def trigger_intraday_scan(db: Session = Depends(get_db)):
     market = market_status_to_dict()
     if not market["is_open"]:
-        signals, last_scan = get_cached_intraday_signals()
+        payload = build_intraday_signals_payload(db)
         return {
             "scanned": 0,
             "skipped": True,
             "market": market,
-            "today_setups": [s for s in signals if s.get("actionable")],
-            "signals": signals,
-            "last_scan": last_scan.isoformat() if last_scan else None,
+            "today_setups": payload["today_setups"],
+            "signals": payload["signals"],
+            "last_scan": payload["last_scan"],
+            "scan_summary": payload["scan_summary"],
         }
-    results = scan_intraday_watchlist()
-    today_setups = [s for s in results if s.get("actionable")]
+    scan_intraday_watchlist(db=db)
+    payload = build_intraday_signals_payload(db)
     return {
-        "scanned": len(results),
+        "scanned": payload["scan_summary"]["scanned_count"],
         "skipped": False,
-        "market": market_status_to_dict(),
-        "today_setups": today_setups,
-        "signals": results,
+        "market": payload["market"],
+        "today_setups": payload["today_setups"],
+        "signals": payload["signals"],
+        "last_scan": payload["last_scan"],
+        "scan_summary": payload["scan_summary"],
     }
 
 
