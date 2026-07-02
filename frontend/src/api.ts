@@ -221,6 +221,23 @@ export interface IntradayBacktestResult {
   }>;
 }
 
+export interface IntradayBacktestRangeResult {
+  replay_type: "shizu_intraday_backtest_range";
+  symbol: string;
+  start_date: string;
+  end_date: string;
+  trading_days: number;
+  trades: number;
+  wins: number;
+  losses: number;
+  no_trade_days: number;
+  win_rate: number;
+  total_result_pct: number;
+  avg_result_pct: number;
+  results: IntradayBacktestResult[];
+  notes?: string[];
+}
+
 export interface IntradayHistoryPage {
   signals: IntradayHistoryRecord[];
   today_trades: IntradayHistoryRecord[];
@@ -580,8 +597,11 @@ export const api = {
   },
   downloadIntradayReport: (format: IntradayReportFormat = "json") =>
     downloadFile(`/intraday/report?format=${format}`, `shizu_intraday_report.${format}`),
-  runIntradayBacktest: (symbol: string, date: string) => {
+  runIntradayBacktest: (symbol: string, date: string, endDate?: string) => {
     const params = new URLSearchParams({ symbol: symbol.toUpperCase(), date });
-    return request<IntradayBacktestResult>(`/intraday/backtest?${params}`);
+    if (endDate && endDate !== date) {
+      params.set("end_date", endDate);
+    }
+    return request<IntradayBacktestResult | IntradayBacktestRangeResult>(`/intraday/backtest?${params}`);
   },
 };

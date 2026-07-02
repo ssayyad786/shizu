@@ -22,7 +22,7 @@ from app.services.intraday_monitor import (
     scan_intraday_watchlist,
 )
 from app.services.intraday_report import build_intraday_report, report_filename, report_to_csv
-from app.services.intraday_backtest import backtest_intraday
+from app.services.intraday_backtest import backtest_intraday, backtest_intraday_range
 from app.services.market import validate_market_symbol
 from app.services.search import resolve_symbol_name
 from app.services.us_market_hours import market_status_to_dict
@@ -224,12 +224,15 @@ def download_intraday_report(
 @router.get("/backtest")
 def run_intraday_backtest(
     symbol: str,
-    date: str = Query(..., description="Trade date YYYY-MM-DD"),
+    date: str = Query(..., description="Start date YYYY-MM-DD (or single day)"),
+    end_date: str | None = Query(None, description="End date YYYY-MM-DD for range replay"),
     db: Session = Depends(get_db),
 ):
-    """Replay current intraday logic on historical bars for a symbol and date."""
+    """Replay current intraday logic on historical bars for a symbol and date or date range."""
     sym = _us_symbol(symbol)
     try:
+        if end_date and end_date != date:
+            return backtest_intraday_range(sym, date, end_date, db=db)
         return backtest_intraday(sym, date, db=db)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e

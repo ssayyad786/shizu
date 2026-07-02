@@ -2130,6 +2130,81 @@ input {
   border-top: 1px solid var(--border);
 }
 
+.intraday-backtest-range-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px 14px;
+}
+
+.intraday-backtest-range-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.intraday-backtest-range-stat strong {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.intraday-backtest-range-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.intraday-backtest-range-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.intraday-backtest-range-table th,
+.intraday-backtest-range-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.intraday-backtest-range-table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.intraday-backtest-range-table tbody tr {
+  cursor: pointer;
+}
+
+.intraday-backtest-range-table tbody tr:hover,
+.intraday-backtest-range-table tbody tr.expanded {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.intraday-backtest-range-detail {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.intraday-backtest-muted {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.win-text {
+  color: #22c55e;
+}
+
+.loss-text {
+  color: #ef4444;
+}
+
 .intraday-section-header {
   display: flex;
   flex-wrap: wrap;

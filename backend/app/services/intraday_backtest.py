@@ -13,7 +13,6 @@ from app.services.intraday_monitor import signal_to_api_dict
 from app.services.intraday_signals import (
     ENTRY_CUTOFF_ET,
     ENTRY_EARLIEST_ET,
-    SESSION_CLOSE,
     US_EASTERN,
     analyze_intraday,
 )
@@ -42,6 +41,21 @@ def _session_day_bars(df: pd.DataFrame, trade_date: date) -> pd.DataFrame:
 
 def _parse_trade_date(date_str: str) -> date:
     return datetime.strptime(date_str, "%Y-%m-%d").date()
+
+
+def iter_us_trading_days(start: date, end: date) -> list[date]:
+    if start > end:
+        raise ValueError("Start date must be on or before end date")
+    days: list[date] = []
+    d = start
+    while d <= end:
+        if is_us_trading_day(d):
+            days.append(d)
+        d += timedelta(days=1)
+    return days
+
+
+MAX_RANGE_TRADING_DAYS = 30
 
 
 def _scan_times(trade_date: date) -> list[datetime]:
@@ -189,23 +203,28 @@ def _find_recorded_trade(db: Session | None, symbol: str, trade_date: date) -> d
     return intraday_to_dict(row)
 
 
-def backtest_intraday(symbol: str, date_str: str, db: Session | None = None) -> dict:
-    symbol = symbol.upper()
-    trade_date = _parse_trade_date(date_str)
-
-    if not is_us_trading_day(trade_date):
-        raise ValueError(f"{date_str} is not a US market trading day")
-
-    df_5m_full = fetch_history(symbol, period="1mo", interval="5m")
-    df_15m_full = fetch_history(symbol, period="1mo", interval="15m")
-    df_1d_full = fetch_history(symbol, period="6mo", interval="1d")
-
+def _backtest_day(
+    symbol: str,
+    trade_date: date,
+    df_5m_full: pd.DataFrame,
+    df_15m_full: pd.DataFrame,
+    df_1d_full: pd.DataFrame,
+    db: Session | None = None,
+) -> dict:
+    date_str = trade_date.isoformat()
     session_5m = _session_day_bars(df_5m_full, trade_date)
     if session_5m.empty:
-        raise ValueError(
-            f"No 5-minute data for {symbol} on {date_str}. "
-            "Yahoo may not have intraday history that far back (try last ~30 days)."
-        )
+        return {
+            "replay_type": "shizu_intraday_backtest",
+            "app_version": __version__,
+            "symbol": symbol,
+            "date": date_str,
+            "traded": False,
+            "scans_run": 0,
+            "session_bars": 0,
+            "message": f"No 5-minute data for {symbol} on {date_str}.",
+            "recorded_trade": _find_recorded_trade(db, symbol, trade_date),
+        }
 
     scan_log: list[dict] = []
     entry_signal = None
@@ -240,7 +259,6 @@ def backtest_intraday(symbol: str, date_str: str, db: Session | None = None) -> 
             entry_time = as_of
             break
 
-    session_close = datetime.combine(trade_date, SESSION_CLOSE, tzinfo=US_EASTERN)
     recorded = _find_recorded_trade(db, symbol, trade_date)
 
     if entry_signal is None or entry_time is None:
@@ -298,10 +316,99 @@ def backtest_intraday(symbol: str, date_str: str, db: Session | None = None) -> 
         "outcome": outcome,
         "scan_log": scan_log,
         "recorded_trade": recorded,
+    }
+
+
+def _history_period_for_range(start: date, end: date) -> str:
+    span = (end - start).days
+    if span <= 25:
+        return "1mo"
+    if span <= 55:
+        return "2mo"
+    return "3mo"
+
+
+def backtest_intraday(symbol: str, date_str: str, db: Session | None = None) -> dict:
+    symbol = symbol.upper()
+    trade_date = _parse_trade_date(date_str)
+
+    if not is_us_trading_day(trade_date):
+        raise ValueError(f"{date_str} is not a US market trading day")
+
+    df_5m_full = fetch_history(symbol, period="1mo", interval="5m")
+    df_15m_full = fetch_history(symbol, period="1mo", interval="15m")
+    df_1d_full = fetch_history(symbol, period="6mo", interval="1d")
+
+    result = _backtest_day(symbol, trade_date, df_5m_full, df_15m_full, df_1d_full, db=db)
+    if not result["traded"] and result.get("session_bars", 0) == 0:
+        raise ValueError(
+            f"No 5-minute data for {symbol} on {date_str}. "
+            "Yahoo may not have intraday history that far back (try last ~30 days)."
+        )
+
+    result["notes"] = [
+        "Replay runs ORB + VWAP rules every 2 minutes from 9:45 AM–2:30 PM ET.",
+        "First actionable signal is taken (one trade per replay, matching live save rules).",
+        "Outcome uses 5m bar highs/lows after entry through market close.",
+        "Compare recorded_trade if the app actually traded this symbol that day.",
+    ]
+    return result
+
+
+def backtest_intraday_range(
+    symbol: str,
+    start_str: str,
+    end_str: str,
+    db: Session | None = None,
+) -> dict:
+    symbol = symbol.upper()
+    start = _parse_trade_date(start_str)
+    end = _parse_trade_date(end_str)
+    trading_days = iter_us_trading_days(start, end)
+
+    if not trading_days:
+        raise ValueError("No US trading days in this date range")
+    if len(trading_days) > MAX_RANGE_TRADING_DAYS:
+        raise ValueError(
+            f"Range spans {len(trading_days)} trading days; maximum is {MAX_RANGE_TRADING_DAYS}. "
+            "Use a shorter range."
+        )
+
+    hist_period = _history_period_for_range(start, end)
+    df_5m_full = fetch_history(symbol, period=hist_period, interval="5m")
+    df_15m_full = fetch_history(symbol, period=hist_period, interval="15m")
+    df_1d_full = fetch_history(symbol, period="6mo", interval="1d")
+
+    day_results: list[dict] = []
+    for trade_date in trading_days:
+        day_results.append(
+            _backtest_day(symbol, trade_date, df_5m_full, df_15m_full, df_1d_full, db=db)
+        )
+
+    traded = [r for r in day_results if r.get("traded")]
+    wins = [r for r in traded if r.get("outcome", {}).get("success")]
+    losses = [r for r in traded if r.get("traded") and not r.get("outcome", {}).get("success")]
+    no_trade = [r for r in day_results if not r.get("traded")]
+    total_pct = sum(r.get("outcome", {}).get("result_pct", 0) for r in traded)
+
+    return {
+        "replay_type": "shizu_intraday_backtest_range",
+        "app_version": __version__,
+        "symbol": symbol,
+        "start_date": start_str,
+        "end_date": end_str,
+        "trading_days": len(trading_days),
+        "trades": len(traded),
+        "wins": len(wins),
+        "losses": len(losses),
+        "no_trade_days": len(no_trade),
+        "win_rate": round(len(wins) / len(traded) * 100, 1) if traded else 0.0,
+        "total_result_pct": round(total_pct, 2),
+        "avg_result_pct": round(total_pct / len(traded), 2) if traded else 0.0,
+        "results": day_results,
         "notes": [
-            "Replay runs ORB + VWAP rules every 2 minutes from 9:45 AM–2:30 PM ET.",
-            "First actionable signal is taken (one trade per replay, matching live save rules).",
-            "Outcome uses 5m bar highs/lows after entry through market close.",
-            "Compare recorded_trade if the app actually traded this symbol that day.",
+            f"Replayed {len(trading_days)} US trading day(s) from {start_str} to {end_str}.",
+            "Each day uses current ORB + VWAP rules (one trade max per day).",
+            "Days with no 5m data or no setup are listed as no-trade.",
         ],
     }
