@@ -1,24 +1,27 @@
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { api, currencyForMarket, HistoryRecord, HistoryStats, Market } from "../api";
 
 const MARKETS: { id: Market; label: string }[] = [
-  { id: "US", label: "US market" },
-  { id: "IN", label: "Indian market" },
+  { id: "US", label: "US" },
+  { id: "IN", label: "India" },
 ];
+
+const PAGE_SIZE = 30;
+const GROUPS_PAGE = 12;
 
 function statusLabel(record: HistoryRecord): { text: string; className: string } {
   switch (record.status) {
     case "target_hit":
-      return { text: "Success — target hit in window", className: "status-win" };
+      return { text: "Target hit", className: "status-win" };
     case "stop_hit":
-      return { text: "Stop loss hit", className: "status-loss" };
+      return { text: "Stop hit", className: "status-loss" };
     case "expired_win":
-      return { text: "Window ended — profitable, no target", className: "status-neutral" };
+      return { text: "Window end — profit", className: "status-neutral" };
     case "expired_loss":
-      return { text: "Window ended — loss", className: "status-loss" };
+      return { text: "Window end — loss", className: "status-loss" };
     default:
       if (record.status === "open" && record.window_open === false) {
-        return { text: "Window ended — finalizing", className: "status-neutral" };
+        return { text: "Window ended", className: "status-neutral" };
       }
       return { text: "In progress", className: "status-open" };
   }
@@ -29,7 +32,213 @@ function fmtPrice(n: number, market: Market) {
   return `${sym}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-const PAGE_SIZE = 30;
+function signalDateKey(record: HistoryRecord): string {
+  return record.created_at.slice(0, 10);
+}
+
+function formatHistoryDateHeader(dateKey: string, isToday: boolean): string {
+  const d = new Date(`${dateKey}T12:00:00`);
+  const formatted = d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return isToday ? `Today — ${formatted}` : formatted;
+}
+
+function isTodayDate(dateKey: string): boolean {
+  const today = new Date();
+  const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  return dateKey === key;
+}
+
+function groupHistoryByDate(records: HistoryRecord[]) {
+  const byDate = new Map<string, HistoryRecord[]>();
+  for (const record of records) {
+    const key = signalDateKey(record);
+    const list = byDate.get(key);
+    if (list) list.push(record);
+    else byDate.set(key, [record]);
+  }
+
+  const groups: { dateKey: string; isToday: boolean; trades: HistoryRecord[] }[] = [];
+  const seen = new Set<string>();
+  for (const record of records) {
+    const key = signalDateKey(record);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const trades = byDate.get(key) ?? [];
+    groups.push({
+      dateKey: key,
+      isToday: isTodayDate(key),
+      trades,
+    });
+  }
+  return groups;
+}
+
+function daySummary(trades: HistoryRecord[]): string {
+  const closed = trades.filter((t) => t.status !== "open");
+  const wins = closed.filter((t) => t.success).length;
+  const open = trades.length - closed.length;
+  const parts = [`${trades.length} signal${trades.length === 1 ? "" : "s"}`];
+  if (closed.length > 0) parts.push(`${wins}/${closed.length} targets hit`);
+  if (open > 0) parts.push(`${open} open`);
+  return parts.join(" · ");
+}
+
+function StatsBar({ stats }: { stats: HistoryStats }) {
+  return (
+    <div className="intraday-stats history-stats-bar">
+      <div className="intraday-stat">
+        <span>Win rate</span>
+        <strong>{stats.win_rate}%</strong>
+      </div>
+      <div className="intraday-stat">
+        <span>Target hits</span>
+        <strong>{stats.target_hits ?? stats.wins}</strong>
+      </div>
+      <div className="intraday-stat">
+        <span>Open</span>
+        <strong>{stats.open}</strong>
+      </div>
+      <div className="intraday-stat">
+        <span>Stop losses</span>
+        <strong>{stats.stop_hits ?? 0}</strong>
+      </div>
+      <div className="intraday-stat">
+        <span>Avg result</span>
+        <strong>
+          {stats.avg_result_pct > 0 ? "+" : ""}
+          {stats.avg_result_pct}%
+        </strong>
+      </div>
+      <div className="intraday-stat">
+        <span>Total</span>
+        <strong>{stats.total_signals}</strong>
+      </div>
+    </div>
+  );
+}
+
+const HistoryTradeCard = memo(function HistoryTradeCard({
+  record,
+  defaultOpen = false,
+}: {
+  record: HistoryRecord;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const st = statusLabel(record);
+  const isOpen = record.status === "open";
+  const actionLabel = record.action.replace("_", " ");
+
+  return (
+    <article className={`intraday-card buy ${st.className} ${open ? "expanded" : "collapsed"}`}>
+      <button
+        type="button"
+        className="intraday-card-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="intraday-chevron" aria-hidden>
+          {open ? "▾" : "▸"}
+        </span>
+        <div className="intraday-card-summary">
+          <span className="intraday-symbol">{record.symbol}</span>
+          {record.name && <span className="intraday-name-inline">{record.name}</span>}
+          <span className={`intraday-dir-pill ${record.action.includes("STRONG") ? "long" : "hold"}`}>
+            {actionLabel}
+          </span>
+          <span className="intraday-summary-stat">@ {fmtPrice(record.entry_price, record.market)}</span>
+          <span className={`intraday-status-inline ${st.className}`}>{st.text}</span>
+          {isOpen && record.progress_pct != null && (
+            <span className={`intraday-summary-stat ${record.progress_pct >= 0 ? "pnl-up" : "pnl-down"}`}>
+              {record.progress_pct > 0 ? "+" : ""}
+              {record.progress_pct}%
+            </span>
+          )}
+          {!isOpen && record.result_pct != null && (
+            <span className={`intraday-summary-stat ${record.result_pct >= 0 ? "pnl-up" : "pnl-down"}`}>
+              {record.result_pct > 0 ? "+" : ""}
+              {record.result_pct}%
+            </span>
+          )}
+        </div>
+      </button>
+
+      {open && (
+        <div className="intraday-card-body">
+          <div className={`intraday-status ${st.className}`}>{st.text}</div>
+          <div className="intraday-levels compact">
+            <div>
+              <span>Entry</span>
+              <strong>{fmtPrice(record.entry_price, record.market)}</strong>
+            </div>
+            <div className="target-text">
+              <span>Target</span>
+              <strong>
+                {fmtPrice(record.sell_target, record.market)} (+{record.target_pct}%)
+              </strong>
+            </div>
+            <div className="stop-text">
+              <span>Stop</span>
+              <strong>
+                {fmtPrice(record.stop_loss, record.market)} (−{record.stop_pct}%)
+              </strong>
+            </div>
+            <div>
+              <span>Score</span>
+              <strong>{record.score}</strong>
+            </div>
+            <div>
+              <span>Conf</span>
+              <strong>{record.confidence}%</strong>
+            </div>
+            <div>
+              <span>Window</span>
+              <strong>{record.hold_days}d</strong>
+            </div>
+          </div>
+
+          {isOpen && (
+            <div className="history-progress-block">
+              <span>
+                Current: {record.current_price ? fmtPrice(record.current_price, record.market) : "—"}
+              </span>
+              <span className="scan-info">
+                High: {record.highest_since ? fmtPrice(record.highest_since, record.market) : "—"} · Low:{" "}
+                {record.lowest_since ? fmtPrice(record.lowest_since, record.market) : "—"}
+              </span>
+              <span className="scan-info">
+                Window ends {new Date(record.expires_at).toLocaleString()}
+                {record.window_open === false && " (ended)"}
+              </span>
+            </div>
+          )}
+
+          {!isOpen && record.result_pct != null && (
+            <p className={`history-closed-line ${record.success ? "pnl-up" : record.result_pct >= 0 ? "" : "pnl-down"}`}>
+              Closed at {record.exit_price ? fmtPrice(record.exit_price, record.market) : "—"} →{" "}
+              <strong>
+                {record.result_pct >= 0 ? "+" : ""}
+                {record.result_pct}%
+              </strong>
+              {record.status === "target_hit" && record.days_to_target != null &&
+                ` · target hit day ${record.days_to_target}`}
+              {record.status === "stop_hit" && " · stop triggered"}
+              {record.status.startsWith("expired") && " · target not reached in window"}
+            </p>
+          )}
+
+          <p className="intraday-summary">{record.summary}</p>
+          <p className="scan-info">Signal saved {new Date(record.created_at).toLocaleString()}</p>
+        </div>
+      )}
+    </article>
+  );
+});
 
 export default function HistoryPanel() {
   const [market, setMarket] = useState<Market>("US");
@@ -40,28 +249,29 @@ export default function HistoryPanel() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [historyGroupsShown, setHistoryGroupsShown] = useState(GROUPS_PAGE);
 
-  const load = useCallback(async (m: Market, silent = false, refresh = true) => {
-    if (silent) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
+  const load = useCallback(async (m: Market, opts?: { silent?: boolean; refreshPrices?: boolean }) => {
+    const silent = opts?.silent ?? false;
+    const refreshPrices = opts?.refreshPrices ?? false;
+    if (silent) setRefreshing(true);
+    else setLoading(true);
     try {
       const data = await api.getHistory(m, {
         limit: PAGE_SIZE,
         offset: 0,
-        refresh,
+        refresh: refreshPrices,
       });
       setRecords(data.signals);
       setStats(data.stats);
       setTotal(data.total);
       setHasMore(data.has_more);
+      setHistoryGroupsShown(GROUPS_PAGE);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [market]);
+  }, []);
 
   const loadMore = async () => {
     setLoadingMore(true);
@@ -81,179 +291,156 @@ export default function HistoryPanel() {
 
   useEffect(() => {
     setRecords([]);
-    load(market, false, true);
-    const interval = setInterval(() => load(market, true, true), 60000);
+    load(market, { refreshPrices: true });
+    const interval = setInterval(() => load(market, { silent: true, refreshPrices: false }), 90000);
     return () => clearInterval(interval);
   }, [market, load]);
+
+  const openTrades = useMemo(() => records.filter((r) => r.status === "open"), [records]);
+  const closedGroups = useMemo(
+    () => groupHistoryByDate(records.filter((r) => r.status !== "open")),
+    [records]
+  );
+  const visibleClosedGroups = useMemo(
+    () => closedGroups.slice(0, historyGroupsShown),
+    [closedGroups, historyGroupsShown]
+  );
 
   const hasData = records.length > 0 || stats !== null;
 
   return (
-    <div className="history-panel">
-      <section className="help-section">
-        <h2>Short-term trade history</h2>
-        <p>
+    <div className="history-panel intraday-panel">
+      <section className="intraday-section history-intro">
+        <h2 className="section-title">Swing trade history</h2>
+        <p className="intraday-intro">
           Every <strong>BUY</strong> or <strong>STRONG BUY</strong> with an achievable target is saved per market.
-          <strong> Success</strong> means the sell target was hit within the signal&apos;s estimated window
-          (<strong>1–10 trading days</strong>, weekdays only; shown as window end on each card). Checks start
-          from the <strong>next trading day</strong> after the signal.
+          Success means the sell target was hit within the estimated <strong>1–10 trading day</strong> window.
+          Tap any row to expand entry, targets, and outcome.
         </p>
       </section>
 
-      <div className="market-tabs">
+      <div className="market-tabs history-market-tabs">
         {MARKETS.map((m) => (
           <button
             key={m.id}
+            type="button"
             className={`market-tab ${market === m.id ? "active" : ""}`}
             onClick={() => setMarket(m.id)}
           >
             {m.label}
+            {stats && market === m.id && stats.total_signals > 0 && (
+              <span className="market-tab-count">{stats.total_signals}</span>
+            )}
           </button>
         ))}
       </div>
 
-      {refreshing && hasData && (
-        <p className="scan-info history-refresh-hint">Updating outcomes…</p>
-      )}
+      <div className="intraday-toolbar">
+        <p className="scan-info history-toolbar-meta">
+          {hasData && !loading
+            ? `Showing ${records.length} of ${total} signal${total === 1 ? "" : "s"}`
+            : " "}
+          {refreshing && hasData && " · Updating outcomes…"}
+        </p>
+        <div className="intraday-toolbar-actions">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => load(market, { silent: true, refreshPrices: true })}
+            disabled={loading || refreshing}
+          >
+            {refreshing ? "Refreshing…" : "Refresh outcomes"}
+          </button>
+        </div>
+      </div>
 
       {loading && !hasData ? (
-        <p style={{ color: "var(--muted)" }}>Loading trade history…</p>
+        <div className="loading-hint">Loading trade history…</div>
       ) : (
         <>
-          {stats && (
-            <div className="stats-row">
-              <div className="stat-card">
-                <div className="stat-value">{stats.total_signals}</div>
-                <div className="stat-label">Total signals</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-value">{stats.open}</div>
-                <div className="stat-label">Open trades</div>
-              </div>
-              <div className="stat-card stat-win">
-                <div className="stat-value">{stats.win_rate}%</div>
-                <div className="stat-label">Target hit rate ({stats.target_hits ?? stats.wins} hits)</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-value">{stats.stop_hits ?? 0}</div>
-                <div className="stat-label">Stop losses</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-value">{stats.expired ?? 0}</div>
-                <div className="stat-label">Expired (no target)</div>
-              </div>
-            </div>
-          )}
+          {stats && stats.total_signals > 0 && <StatsBar stats={stats} />}
 
           {records.length === 0 ? (
             <div className="empty-state">
               <h2>No saved signals yet</h2>
               <p>
-                Add stocks to your {market === "US" ? "US" : "Indian"} wishlist. When a BUY signal fires,
-                it will appear here with entry, target, and stop.
+                Add stocks to your {market === "US" ? "US" : "Indian"} wishlist. When a BUY signal fires, it
+                appears here with entry, target, and stop.
               </p>
             </div>
           ) : (
             <>
-            <p className="scan-info history-count">
-              Showing {records.length} of {total} signal{total === 1 ? "" : "s"}
-            </p>
-            <div className="history-list">
-              {records.map((r) => {
-                const st = statusLabel(r);
-                const isOpen = r.status === "open";
-                return (
-                  <article key={r.id} className={`history-card ${st.className}`}>
-                    <div className="history-card-top">
-                      <div>
-                        <div className="history-symbol-row">
-                          <span className="history-symbol">{r.symbol}</span>
-                          {r.name && <span className="history-name">{r.name}</span>}
+              {openTrades.length > 0 && (
+                <section className="intraday-section intraday-today history-open-section">
+                  <h2 className="section-title">Open trades — tracking window</h2>
+                  <p className="intraday-today-note">
+                    {openTrades.length} active signal{openTrades.length === 1 ? "" : "s"} being monitored for
+                    target or stop.
+                  </p>
+                  <div className="intraday-card-list">
+                    {openTrades.map((r, i) => (
+                      <HistoryTradeCard key={r.id} record={r} defaultOpen={i === 0} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              <section className="intraday-section">
+                <div className="intraday-section-header">
+                  <h2 className="section-title">Past signals by date</h2>
+                </div>
+                <p className="intraday-history-note">
+                  Grouped by signal date — separate from the Intraday tab (session trades).
+                </p>
+
+                {closedGroups.length === 0 ? (
+                  <div className="empty-state">
+                    <p>No closed signals yet — outcomes appear here once trades finish.</p>
+                  </div>
+                ) : (
+                  <div className="intraday-history-by-date">
+                    {visibleClosedGroups.map((group) => (
+                      <section
+                        key={group.dateKey}
+                        className={`intraday-history-date-group${group.isToday ? " is-today" : ""}`}
+                      >
+                        <div className="intraday-history-date-header">
+                          <h3>{formatHistoryDateHeader(group.dateKey, group.isToday)}</h3>
+                          <span className="intraday-history-date-meta">{daySummary(group.trades)}</span>
                         </div>
-                        <div className="history-badges">
-                        <span className={`market-pill market-${r.market}`}>{r.market}</span>
-                        <span className={`action-pill ${r.action}`}>{r.action.replace("_", " ")}</span>
-                        <span className={`history-status ${st.className}`}>{st.text}</span>
+                        <div className="intraday-card-list">
+                          {group.trades.map((r) => (
+                            <HistoryTradeCard key={r.id} record={r} />
+                          ))}
                         </div>
-                      </div>
-                      <time className="scan-info">{new Date(r.created_at).toLocaleString()}</time>
-                    </div>
+                      </section>
+                    ))}
 
-                    <div className="trade-levels">
-                      <div className="trade-level buy-level">
-                        <span className="level-label">Buy at</span>
-                        <span className="level-price">{fmtPrice(r.entry_price, r.market)}</span>
-                      </div>
-                      <div className="trade-level target-level">
-                        <span className="level-label">Sell target</span>
-                        <span className="level-price">{fmtPrice(r.sell_target, r.market)}</span>
-                        <span className="level-pct">+{r.target_pct}%</span>
-                      </div>
-                      <div className="trade-level stop-level">
-                        <span className="level-label">Stop loss</span>
-                        <span className="level-price">{fmtPrice(r.stop_loss, r.market)}</span>
-                        <span className="level-pct">−{r.stop_pct}%</span>
-                      </div>
-                    </div>
-
-                    {isOpen && (
-                      <div className="history-progress">
-                        <span>
-                          Current: {r.current_price ? fmtPrice(r.current_price, r.market) : "—"}
-                          {r.progress_pct != null && (
-                            <span className={r.progress_pct >= 0 ? "up" : "down"}>
-                              {" "}({r.progress_pct >= 0 ? "+" : ""}{r.progress_pct}%)
-                            </span>
-                          )}
-                        </span>
-                        <span className="scan-info">
-                          High since: {r.highest_since ? fmtPrice(r.highest_since, r.market) : "—"} ·
-                          Low since: {r.lowest_since ? fmtPrice(r.lowest_since, r.market) : "—"}
-                        </span>
-                        <span className="scan-info">
-                          Window ends: {new Date(r.expires_at).toLocaleString()}
-                          {r.window_open === false && " (ended)"}
-                        </span>
-                      </div>
+                    {closedGroups.length > visibleClosedGroups.length && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost intraday-history-show-more"
+                        onClick={() => setHistoryGroupsShown((n) => n + GROUPS_PAGE)}
+                      >
+                        Show older days ({closedGroups.length - visibleClosedGroups.length} more)
+                      </button>
                     )}
+                  </div>
+                )}
+              </section>
 
-                    {!isOpen && r.result_pct != null && (
-                      <div className={`history-result ${r.success ? "up" : r.result_pct >= 0 ? "" : "down"}`}>
-                        Closed at {r.exit_price ? fmtPrice(r.exit_price, r.market) : "—"} →{" "}
-                        <strong>{r.result_pct >= 0 ? "+" : ""}{r.result_pct}%</strong>
-                        {r.status === "target_hit" && r.days_to_target != null &&
-                          ` — target hit on day ${r.days_to_target} (success)`}
-                        {r.status === "stop_hit" && " — stop loss triggered."}
-                        {r.status.startsWith("expired") && " — target not reached in time."}
-                      </div>
-                    )}
-
-                    <p className="history-summary">{r.summary}</p>
-                  </article>
-                );
-              })}
-            </div>
-
-            {hasMore && (
-              <button
-                className="btn btn-ghost"
-                onClick={loadMore}
-                disabled={loadingMore}
-                style={{ marginTop: 12 }}
-              >
-                {loadingMore ? "Loading…" : `Load more (${total - records.length} remaining)`}
-              </button>
-            )}
+              {hasMore && (
+                <button
+                  type="button"
+                  className="btn btn-ghost intraday-history-show-more"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? "Loading…" : `Load more signals (${total - records.length} remaining)`}
+                </button>
+              )}
             </>
           )}
-
-          <button
-            className="btn btn-ghost"
-            onClick={() => load(market, true, true)}
-            style={{ marginTop: 16 }}
-          >
-            Refresh outcomes
-          </button>
         </>
       )}
     </div>

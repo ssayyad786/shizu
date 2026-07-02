@@ -244,7 +244,12 @@ export interface IntradayTradingDays {
   end_date: string;
   trading_days: string[];
   count: number;
+  max_trading_days: number;
+  max_calendar_days: number;
 }
+
+export const INTRADAY_MAX_RANGE_TRADING_DAYS = 30;
+export const INTRADAY_MAX_RANGE_CALENDAR_DAYS = 90;
 
 export interface IntradayHistoryPage {
   signals: IntradayHistoryRecord[];
@@ -616,8 +621,8 @@ export const api = {
     const params = new URLSearchParams({ start, end });
     return request<IntradayTradingDays>(`/intraday/trading-days?${params}`);
   },
-  runIntradayBacktestDay: (symbol: string, date: string) => {
-    const params = new URLSearchParams({ symbol: symbol.toUpperCase(), date });
-    return request<IntradayBacktestResult>(`/intraday/backtest?${params}`);
+  runIntradayBacktestDay: (symbol: string, date: string, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ symbol: symbol.toUpperCase(), date, light: "true" });
+    return request<IntradayBacktestResult>(`/intraday/backtest?${params}`, { signal });
   },
 };

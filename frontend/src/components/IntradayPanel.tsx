@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
   IntradayHistoryRecord,
@@ -87,7 +87,7 @@ function statusLabel(record: IntradayHistoryRecord) {
   }
 }
 
-function SetupCard({
+const SetupCard = memo(function SetupCard({
   signal,
   defaultOpen = false,
   showTodayBadge = false,
@@ -156,7 +156,7 @@ function SetupCard({
       )}
     </article>
   );
-}
+});
 
 function tradeDateKey(record: IntradayHistoryRecord): string {
   return record.trade_date.slice(0, 10);
@@ -208,7 +208,7 @@ function daySummary(trades: IntradayHistoryRecord[]): string {
   return parts.join(" · ");
 }
 
-function TradeCard({
+const TradeCard = memo(function TradeCard({
   record,
   defaultOpen = false,
 }: {
@@ -273,7 +273,7 @@ function TradeCard({
       )}
     </article>
   );
-}
+});
 
 function StatsBar({ stats }: { stats: IntradayStats }) {
   return (
@@ -299,14 +299,17 @@ export default function IntradayPanel() {
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
+  const [historyGroupsShown, setHistoryGroupsShown] = useState(12);
 
-  const refresh = useCallback(async (silent = false) => {
+  const refresh = useCallback(async (opts?: { silent?: boolean; refreshPrices?: boolean }) => {
+    const silent = opts?.silent ?? false;
+    const refreshPrices = opts?.refreshPrices ?? false;
     if (!silent) setLoading(true);
     try {
       const [wl, sig, hist] = await Promise.all([
         api.getIntradayWatchlist(),
         api.getIntradaySignals(),
-        api.getIntradayHistory({ refresh: true }),
+        api.getIntradayHistory({ refresh: refreshPrices }),
       ]);
       setWatchlist(wl);
       setSignals(sig.signals);
@@ -325,17 +328,28 @@ export default function IntradayPanel() {
   }, []);
 
   useEffect(() => {
-    refresh();
-    const interval = setInterval(() => refresh(true), 60000);
+    refresh({ refreshPrices: true });
+    const interval = setInterval(() => refresh({ silent: true, refreshPrices: false }), 90000);
     return () => clearInterval(interval);
   }, [refresh]);
+
+  const watchlistSymbols = useMemo(() => watchlist.map((w) => w.symbol), [watchlist]);
+  const openTodayTrades = useMemo(
+    () => todayTrades.filter((t) => t.status === "open"),
+    [todayTrades]
+  );
+  const historyByDate = useMemo(() => groupHistoryByDate(history), [history]);
+  const visibleHistoryGroups = useMemo(
+    () => historyByDate.slice(0, historyGroupsShown),
+    [historyByDate, historyGroupsShown]
+  );
 
   const handleAdd = async (symbol: string, _market: Market, name?: string) => {
     await api.addIntradaySymbol(symbol, name);
     if (market?.is_open) {
       await api.triggerIntradayScan();
     }
-    await refresh(true);
+    await refresh({ silent: true, refreshPrices: true });
   };
 
   const handleBulkComplete = async (result: import("../api").BulkAddResult) => {
@@ -343,13 +357,13 @@ export default function IntradayPanel() {
       if (market?.is_open) {
         await api.triggerIntradayScan();
       }
-      await refresh(true);
+      await refresh({ silent: true, refreshPrices: true });
     }
   };
 
   const handleRemove = async (symbol: string) => {
     await api.removeIntradaySymbol(symbol);
-    await refresh(true);
+    await refresh({ silent: true });
   };
 
   const handleScan = async () => {
@@ -357,7 +371,7 @@ export default function IntradayPanel() {
     setScanning(true);
     try {
       await api.triggerIntradayScan();
-      await refresh(true);
+      await refresh({ silent: true, refreshPrices: true });
     } finally {
       setScanning(false);
     }
@@ -365,15 +379,12 @@ export default function IntradayPanel() {
 
   const marketOpen = market?.is_open ?? false;
 
-  const openTodayTrades = todayTrades.filter((t) => t.status === "open");
-  const historyByDate = groupHistoryByDate(history);
-
   return (
     <div className="intraday-panel">
       {market && <UsMarketBanner market={market} />}
 
       <IntradayReportDownload onError={setError} />
-      <IntradayBacktestPanel watchlistSymbols={watchlist.map((w) => w.symbol)} onError={setError} />
+      <IntradayBacktestPanel watchlistSymbols={watchlistSymbols} onError={setError} />
 
       <div className="intraday-toolbar">
         <p className="intraday-intro">
@@ -478,7 +489,7 @@ export default function IntradayPanel() {
           <div className="empty-state"><p>No intraday trades recorded yet.</p></div>
         ) : (
           <div className="intraday-history-by-date">
-            {historyByDate.map((group) => (
+            {visibleHistoryGroups.map((group) => (
               <section
                 key={group.dateKey}
                 className={`intraday-history-date-group${group.isToday ? " is-today" : ""}`}
@@ -494,6 +505,15 @@ export default function IntradayPanel() {
                 </div>
               </section>
             ))}
+            {historyByDate.length > visibleHistoryGroups.length && (
+              <button
+                type="button"
+                className="btn btn-ghost intraday-history-show-more"
+                onClick={() => setHistoryGroupsShown((n) => n + 12)}
+              >
+                Show older days ({historyByDate.length - visibleHistoryGroups.length} more)
+              </button>
+            )}
           </div>
         )}
       </section>

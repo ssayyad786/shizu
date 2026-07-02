@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import date, datetime, timedelta
 
 import pandas as pd
@@ -21,6 +22,10 @@ from app.services.us_market_hours import is_us_trading_day
 from app.version import __version__
 
 SCAN_INTERVAL_MINUTES = 2
+MAX_RANGE_TRADING_DAYS = 30
+MAX_RANGE_CALENDAR_DAYS = 90
+FRAME_CACHE_TTL_SEC = 300
+_frame_cache: dict[str, tuple[float, pd.DataFrame, pd.DataFrame, pd.DataFrame]] = {}
 
 
 def _to_eastern(df: pd.DataFrame) -> pd.DataFrame:
@@ -31,12 +36,61 @@ def _to_eastern(df: pd.DataFrame) -> pd.DataFrame:
     return work
 
 
-def _slice_as_of(df: pd.DataFrame, as_of_et: datetime) -> pd.DataFrame:
-    return _to_eastern(df)[_to_eastern(df).index <= as_of_et]
+def _slice_as_of(df_et: pd.DataFrame, as_of_et: datetime) -> pd.DataFrame:
+    return df_et[df_et.index <= as_of_et]
 
 
-def _session_day_bars(df: pd.DataFrame, trade_date: date) -> pd.DataFrame:
-    return _to_eastern(df)[_to_eastern(df).index.date == trade_date]
+def _session_day_bars(df_et: pd.DataFrame, trade_date: date) -> pd.DataFrame:
+    return df_et[df_et.index.date == trade_date]
+
+
+def _history_period_for_range(start: date, end: date) -> str:
+    span = (end - start).days
+    if span <= 25:
+        return "1mo"
+    if span <= 55:
+        return "2mo"
+    return "3mo"
+
+
+def _load_symbol_frames(symbol: str, period: str = "1mo") -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load and cache Yahoo intraday/daily frames (Eastern tz) for repeat day replays."""
+    symbol = symbol.upper()
+    cache_key = f"{symbol}:{period}"
+    now = time.time()
+    cached = _frame_cache.get(cache_key)
+    if cached and now - cached[0] < FRAME_CACHE_TTL_SEC:
+        return cached[1], cached[2], cached[3]
+
+    df_5m = _to_eastern(fetch_history(symbol, period=period, interval="5m"))
+    df_15m = _to_eastern(fetch_history(symbol, period=period, interval="15m"))
+    df_1d = _to_eastern(fetch_history(symbol, period="6mo", interval="1d"))
+    _frame_cache[cache_key] = (now, df_5m, df_15m, df_1d)
+
+    if len(_frame_cache) > 8:
+        oldest_key = min(_frame_cache, key=lambda k: _frame_cache[k][0])
+        del _frame_cache[oldest_key]
+
+    return df_5m, df_15m, df_1d
+
+
+def lighten_backtest_result(result: dict) -> dict:
+    """Drop bulky fields for range replay responses."""
+    slim = {k: v for k, v in result.items() if k != "scan_log"}
+    signal = slim.get("signal")
+    if isinstance(signal, dict):
+        slim["signal"] = {k: v for k, v in signal.items() if k != "indicators"}
+    return slim
+
+
+def validate_date_range(start: date, end: date) -> None:
+    if start > end:
+        raise ValueError("Start date must be on or before end date")
+    if (end - start).days > MAX_RANGE_CALENDAR_DAYS:
+        raise ValueError(
+            f"Date range spans more than {MAX_RANGE_CALENDAR_DAYS} calendar days. "
+            "Use a shorter range."
+        )
 
 
 def _parse_trade_date(date_str: str) -> date:
@@ -48,8 +102,7 @@ def parse_trade_date(date_str: str) -> date:
 
 
 def iter_us_trading_days(start: date, end: date) -> list[date]:
-    if start > end:
-        raise ValueError("Start date must be on or before end date")
+    validate_date_range(start, end)
     days: list[date] = []
     d = start
     while d <= end:
@@ -57,9 +110,6 @@ def iter_us_trading_days(start: date, end: date) -> list[date]:
             days.append(d)
         d += timedelta(days=1)
     return days
-
-
-MAX_RANGE_TRADING_DAYS = 30
 
 
 def _scan_times(trade_date: date) -> list[datetime]:
@@ -237,8 +287,7 @@ def _backtest_day(
     for as_of in _scan_times(trade_date):
         df_5m = _slice_as_of(df_5m_full, as_of)
         df_15m = _slice_as_of(df_15m_full, as_of)
-        df_1d = _to_eastern(df_1d_full)
-        df_1d = df_1d[df_1d.index.date <= trade_date]
+        df_1d = df_1d_full[df_1d_full.index.date <= trade_date]
 
         if len(df_5m) < 30:
             continue
@@ -323,25 +372,20 @@ def _backtest_day(
     }
 
 
-def _history_period_for_range(start: date, end: date) -> str:
-    span = (end - start).days
-    if span <= 25:
-        return "1mo"
-    if span <= 55:
-        return "2mo"
-    return "3mo"
-
-
-def backtest_intraday(symbol: str, date_str: str, db: Session | None = None) -> dict:
+def backtest_intraday(
+    symbol: str,
+    date_str: str,
+    db: Session | None = None,
+    *,
+    light: bool = False,
+) -> dict:
     symbol = symbol.upper()
     trade_date = _parse_trade_date(date_str)
 
     if not is_us_trading_day(trade_date):
         raise ValueError(f"{date_str} is not a US market trading day")
 
-    df_5m_full = fetch_history(symbol, period="1mo", interval="5m")
-    df_15m_full = fetch_history(symbol, period="1mo", interval="15m")
-    df_1d_full = fetch_history(symbol, period="6mo", interval="1d")
+    df_5m_full, df_15m_full, df_1d_full = _load_symbol_frames(symbol, period="1mo")
 
     result = _backtest_day(symbol, trade_date, df_5m_full, df_15m_full, df_1d_full, db=db)
     if not result["traded"] and result.get("session_bars", 0) == 0:
@@ -350,13 +394,14 @@ def backtest_intraday(symbol: str, date_str: str, db: Session | None = None) -> 
             "Yahoo may not have intraday history that far back (try last ~30 days)."
         )
 
-    result["notes"] = [
-        "Replay runs ORB + VWAP rules every 2 minutes from 9:45 AM–2:30 PM ET.",
-        "First actionable signal is taken (one trade per replay, matching live save rules).",
-        "Outcome uses 5m bar highs/lows after entry through market close.",
-        "Compare recorded_trade if the app actually traded this symbol that day.",
-    ]
-    return result
+    if not light:
+        result["notes"] = [
+            "Replay runs ORB + VWAP rules every 2 minutes from 9:45 AM–2:30 PM ET.",
+            "First actionable signal is taken (one trade per replay, matching live save rules).",
+            "Outcome uses 5m bar highs/lows after entry through market close.",
+            "Compare recorded_trade if the app actually traded this symbol that day.",
+        ]
+    return lighten_backtest_result(result) if light else result
 
 
 def backtest_intraday_range(
@@ -379,9 +424,7 @@ def backtest_intraday_range(
         )
 
     hist_period = _history_period_for_range(start, end)
-    df_5m_full = fetch_history(symbol, period=hist_period, interval="5m")
-    df_15m_full = fetch_history(symbol, period=hist_period, interval="15m")
-    df_1d_full = fetch_history(symbol, period="6mo", interval="1d")
+    df_5m_full, df_15m_full, df_1d_full = _load_symbol_frames(symbol, period=hist_period)
 
     day_results: list[dict] = []
     for trade_date in trading_days:

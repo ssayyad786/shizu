@@ -23,6 +23,7 @@ from app.services.intraday_monitor import (
 )
 from app.services.intraday_report import build_intraday_report, report_filename, report_to_csv
 from app.services.intraday_backtest import (
+    MAX_RANGE_CALENDAR_DAYS,
     MAX_RANGE_TRADING_DAYS,
     backtest_intraday,
     backtest_intraday_range,
@@ -249,6 +250,8 @@ def get_trading_days(
             "end_date": end,
             "trading_days": [d.isoformat() for d in days],
             "count": len(days),
+            "max_trading_days": MAX_RANGE_TRADING_DAYS,
+            "max_calendar_days": MAX_RANGE_CALENDAR_DAYS,
         }
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
@@ -259,6 +262,7 @@ def run_intraday_backtest(
     symbol: str,
     date: str = Query(..., description="Start date YYYY-MM-DD (or single day)"),
     end_date: str | None = Query(None, description="End date YYYY-MM-DD for range replay"),
+    light: bool = Query(False, description="Omit bulky scan_log from response"),
     db: Session = Depends(get_db),
 ):
     """Replay current intraday logic on historical bars for a symbol and date or date range."""
@@ -266,6 +270,6 @@ def run_intraday_backtest(
     try:
         if end_date and end_date != date:
             return backtest_intraday_range(sym, date, end_date, db=db)
-        return backtest_intraday(sym, date, db=db)
+        return backtest_intraday(sym, date, db=db, light=light)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e

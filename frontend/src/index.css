@@ -501,6 +501,87 @@ input {
   margin-top: 4px;
 }
 
+.history-panel.intraday-panel {
+  gap: 20px;
+}
+
+.history-intro .section-title {
+  margin: 0 0 8px;
+}
+
+.history-market-tabs .market-tab-count {
+  margin-left: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.history-toolbar-meta {
+  margin: 0;
+  min-height: 1.2em;
+}
+
+.history-open-section {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.05);
+}
+
+.intraday-card.buy.status-win {
+  border-left: 3px solid var(--green);
+}
+
+.intraday-card.buy.status-loss {
+  border-left: 3px solid var(--red);
+}
+
+.intraday-card.buy.status-open {
+  border-left: 3px solid var(--accent, #3b82f6);
+}
+
+.intraday-card.buy.status-neutral {
+  border-left: 3px solid var(--muted);
+}
+
+.intraday-status.status-win {
+  color: var(--green);
+}
+
+.intraday-status.status-loss {
+  color: var(--red);
+}
+
+.intraday-status.status-neutral {
+  color: var(--muted);
+}
+
+.intraday-status-inline.status-win {
+  color: var(--green);
+}
+
+.intraday-status-inline.status-loss {
+  color: var(--red);
+}
+
+.intraday-status-inline.status-neutral {
+  color: var(--muted);
+}
+
+.history-progress-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.84rem;
+  margin: 10px 0;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.history-closed-line {
+  font-size: 0.88rem;
+  margin: 10px 0 0;
+}
+
 .history-list {
   display: flex;
   flex-direction: column;
@@ -2079,6 +2160,40 @@ input {
 .intraday-replay-btn {
   align-self: flex-end;
   margin-bottom: 2px;
+}
+
+.intraday-replay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 2px;
+}
+
+.intraday-stop-btn {
+  align-self: flex-end;
+  color: #ef4444;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+}
+
+.intraday-backtest-progress-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.intraday-backtest-progress-fill.cancelled {
+  background: linear-gradient(90deg, #94a3b8, #cbd5e1);
+}
+
+.intraday-backtest-show-more,
+.intraday-history-show-more {
+  width: 100%;
+  margin-top: 8px;
 }
 
 .intraday-backtest-result {

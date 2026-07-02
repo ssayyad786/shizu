@@ -1,5 +1,11 @@
-import { useState } from "react";
-import { api, IntradayBacktestRangeResult, IntradayBacktestResult } from "../api";
+import { useCallback, useRef, useState } from "react";
+import {
+  api,
+  INTRADAY_MAX_RANGE_CALENDAR_DAYS,
+  INTRADAY_MAX_RANGE_TRADING_DAYS,
+  IntradayBacktestRangeResult,
+  IntradayBacktestResult,
+} from "../api";
 
 type Props = {
   watchlistSymbols: string[];
@@ -11,7 +17,10 @@ type RangeProgress = {
   done: number;
   current: string | null;
   etaSec: number | null;
+  cancelled?: boolean;
 };
+
+const TABLE_PAGE_SIZE = 20;
 
 function statusLabel(status: string) {
   switch (status) {
@@ -44,11 +53,18 @@ function formatEta(seconds: number | null): string {
   return mins === 1 ? "~1 min left" : `~${mins} min left`;
 }
 
+function calendarSpanDays(start: string, end: string): number {
+  const a = new Date(`${start}T12:00:00`).getTime();
+  const b = new Date(`${end}T12:00:00`).getTime();
+  return Math.round(Math.abs(b - a) / 86_400_000);
+}
+
 function buildRangeResult(
   symbol: string,
   startDate: string,
   endDate: string,
-  results: IntradayBacktestResult[]
+  results: IntradayBacktestResult[],
+  cancelled = false
 ): IntradayBacktestRangeResult {
   const traded = results.filter((r) => r.traded);
   const wins = traded.filter((r) => r.outcome?.success);
@@ -70,24 +86,46 @@ function buildRangeResult(
     total_result_pct: Math.round(totalPct * 100) / 100,
     avg_result_pct: traded.length ? Math.round((totalPct / traded.length) * 100) / 100 : 0,
     results,
+    notes: cancelled
+      ? [`Stopped early — ${results.length} day(s) replayed.`]
+      : undefined,
   };
 }
 
-function RangeProgressBar({ progress }: { progress: RangeProgress }) {
+function RangeProgressBar({
+  progress,
+  onStop,
+}: {
+  progress: RangeProgress;
+  onStop?: () => void;
+}) {
   const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
   const eta = formatEta(progress.etaSec);
+  const running = progress.done < progress.total && !progress.cancelled;
 
   return (
     <div className="intraday-backtest-progress">
       <div className="intraday-backtest-progress-header">
         <span>
+          {progress.cancelled ? "Stopped — " : ""}
           {progress.done} of {progress.total} trading day{progress.total === 1 ? "" : "s"} done
-          {progress.current ? ` · replaying ${progress.current}` : progress.done === progress.total ? " · complete" : ""}
+          {running && progress.current ? ` · replaying ${progress.current}` : ""}
+          {!running && !progress.cancelled && progress.done === progress.total ? " · complete" : ""}
         </span>
-        {eta && <span className="intraday-backtest-progress-eta">{eta}</span>}
+        <span className="intraday-backtest-progress-actions">
+          {eta && running && <span className="intraday-backtest-progress-eta">{eta}</span>}
+          {running && onStop && (
+            <button type="button" className="btn btn-ghost btn-sm intraday-stop-btn" onClick={onStop}>
+              Stop
+            </button>
+          )}
+        </span>
       </div>
       <div className="intraday-backtest-progress-track" aria-hidden>
-        <div className="intraday-backtest-progress-fill" style={{ width: `${pct}%` }} />
+        <div
+          className={`intraday-backtest-progress-fill${progress.cancelled ? " cancelled" : ""}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );
@@ -165,59 +203,65 @@ function SingleDayResult({ result }: { result: IntradayBacktestResult }) {
 function RangeResult({
   result,
   progress,
+  onStop,
 }: {
   result: IntradayBacktestRangeResult;
   progress?: RangeProgress | null;
+  onStop?: () => void;
 }) {
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [tableLimit, setTableLimit] = useState(TABLE_PAGE_SIZE);
   const expanded = result.results.find((r) => r.date === expandedDate) ?? null;
-  const loading = progress != null && progress.done < progress.total;
+  const running = progress != null && progress.done < progress.total && !progress.cancelled;
+  const loading = running;
+  const visibleRows = result.results.slice(0, tableLimit);
+  const hasMoreRows = result.results.length > tableLimit;
 
   return (
     <div className="intraday-backtest-result">
-      {progress && progress.total > 1 && <RangeProgressBar progress={progress} />}
+      {progress && progress.total > 1 && <RangeProgressBar progress={progress} onStop={onStop} />}
 
       {!loading && (
-        <div className="intraday-backtest-range-summary">
-          <div className="intraday-backtest-range-stat">
-            <span>Trading days</span>
-            <strong>{result.trading_days}</strong>
+        <>
+          <div className="intraday-backtest-range-summary">
+            <div className="intraday-backtest-range-stat">
+              <span>Trading days</span>
+              <strong>{result.trading_days}</strong>
+            </div>
+            <div className="intraday-backtest-range-stat">
+              <span>Trades</span>
+              <strong>{result.trades}</strong>
+            </div>
+            <div className="intraday-backtest-range-stat">
+              <span>Wins / losses</span>
+              <strong>
+                {result.wins} / {result.losses}
+              </strong>
+            </div>
+            <div className="intraday-backtest-range-stat">
+              <span>Win rate</span>
+              <strong>{result.win_rate}%</strong>
+            </div>
+            <div className="intraday-backtest-range-stat">
+              <span>Total P&amp;L</span>
+              <strong className={result.total_result_pct >= 0 ? "win-text" : "loss-text"}>
+                {result.total_result_pct > 0 ? "+" : ""}
+                {result.total_result_pct}%
+              </strong>
+            </div>
+            <div className="intraday-backtest-range-stat">
+              <span>Avg / trade</span>
+              <strong>
+                {result.avg_result_pct > 0 ? "+" : ""}
+                {result.avg_result_pct}%
+              </strong>
+            </div>
           </div>
-          <div className="intraday-backtest-range-stat">
-            <span>Trades</span>
-            <strong>{result.trades}</strong>
-          </div>
-          <div className="intraday-backtest-range-stat">
-            <span>Wins / losses</span>
-            <strong>
-              {result.wins} / {result.losses}
-            </strong>
-          </div>
-          <div className="intraday-backtest-range-stat">
-            <span>Win rate</span>
-            <strong>{result.win_rate}%</strong>
-          </div>
-          <div className="intraday-backtest-range-stat">
-            <span>Total P&amp;L</span>
-            <strong className={result.total_result_pct >= 0 ? "win-text" : "loss-text"}>
-              {result.total_result_pct > 0 ? "+" : ""}
-              {result.total_result_pct}%
-            </strong>
-          </div>
-          <div className="intraday-backtest-range-stat">
-            <span>Avg / trade</span>
-            <strong>
-              {result.avg_result_pct > 0 ? "+" : ""}
-              {result.avg_result_pct}%
-            </strong>
-          </div>
-        </div>
-      )}
-
-      {!loading && (
-        <p className="intraday-dataset-meta">
-          {result.start_date} → {result.end_date} · {result.no_trade_days} day(s) with no trade
-        </p>
+          <p className="intraday-dataset-meta">
+            {result.start_date} → {result.end_date} · {result.no_trade_days} day(s) with no trade
+            {result.notes?.[0] ? ` · ${result.notes[0]}` : ""}
+          </p>
+        </>
       )}
 
       {result.results.length > 0 && (
@@ -234,7 +278,7 @@ function RangeResult({
               </tr>
             </thead>
             <tbody>
-              {result.results.map((day) => (
+              {visibleRows.map((day) => (
                 <tr
                   key={day.date}
                   className={expandedDate === day.date ? "expanded" : ""}
@@ -280,6 +324,15 @@ function RangeResult({
               )}
             </tbody>
           </table>
+          {hasMoreRows && !loading && (
+            <button
+              type="button"
+              className="btn btn-ghost intraday-backtest-show-more"
+              onClick={() => setTableLimit((n) => n + TABLE_PAGE_SIZE)}
+            >
+              Show more ({result.results.length - tableLimit} remaining)
+            </button>
+          )}
         </div>
       )}
 
@@ -300,21 +353,52 @@ export default function IntradayBacktestPanel({ watchlistSymbols, onError }: Pro
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<IntradayBacktestResult | IntradayBacktestRangeResult | null>(null);
   const [rangeProgress, setRangeProgress] = useState<RangeProgress | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const isRange = Boolean(endDate && endDate !== startDate);
 
+  const stopReplay = useCallback(() => {
+    abortRef.current?.abort();
+    setRangeProgress((p) => (p ? { ...p, cancelled: true, current: null, etaSec: null } : p));
+  }, []);
+
+  const validateRange = useCallback(() => {
+    if (!isRange) return true;
+    const span = calendarSpanDays(startDate, endDate);
+    if (span > INTRADAY_MAX_RANGE_CALENDAR_DAYS) {
+      onError?.(
+        `Range is ${span} calendar days — maximum is ${INTRADAY_MAX_RANGE_CALENDAR_DAYS}. Pick a shorter period.`
+      );
+      return false;
+    }
+    return true;
+  }, [endDate, isRange, onError, startDate]);
+
   const runRangeReplay = async (sym: string) => {
     const schedule = await api.getIntradayTradingDays(startDate, endDate);
+    const maxDays = schedule.max_trading_days ?? INTRADAY_MAX_RANGE_TRADING_DAYS;
+    if (schedule.count > maxDays) {
+      throw new Error(
+        `Range has ${schedule.count} trading days — maximum is ${maxDays}. Use a shorter range.`
+      );
+    }
+
     const days = schedule.trading_days;
     const dayResults: IntradayBacktestResult[] = [];
     const startedAt = Date.now();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    let cancelled = false;
 
     setRangeProgress({ total: days.length, done: 0, current: days[0] ?? null, etaSec: null });
-    setResult(
-      buildRangeResult(sym, startDate, endDate, [])
-    );
+    setResult(buildRangeResult(sym, startDate, endDate, []));
 
     for (let i = 0; i < days.length; i++) {
+      if (controller.signal.aborted) {
+        cancelled = true;
+        break;
+      }
+
       const day = days[i];
       setRangeProgress({
         total: days.length,
@@ -324,9 +408,13 @@ export default function IntradayBacktestPanel({ watchlistSymbols, onError }: Pro
       });
 
       try {
-        const dayResult = await api.runIntradayBacktestDay(sym, day);
+        const dayResult = await api.runIntradayBacktestDay(sym, day, controller.signal);
         dayResults.push(dayResult);
       } catch (e) {
+        if (controller.signal.aborted) {
+          cancelled = true;
+          break;
+        }
         dayResults.push({
           symbol: sym,
           date: day,
@@ -342,12 +430,14 @@ export default function IntradayBacktestPanel({ watchlistSymbols, onError }: Pro
       setRangeProgress({
         total: days.length,
         done: i + 1,
-        current: i + 1 < days.length ? days[i + 1] : null,
-        etaSec: remaining,
+        current: cancelled || i + 1 >= days.length ? null : days[i + 1],
+        etaSec: cancelled ? null : remaining,
+        cancelled,
       });
-      setResult(buildRangeResult(sym, startDate, endDate, [...dayResults]));
+      setResult(buildRangeResult(sym, startDate, endDate, dayResults, cancelled));
     }
 
+    abortRef.current = null;
     setRangeProgress(null);
   };
 
@@ -360,10 +450,12 @@ export default function IntradayBacktestPanel({ watchlistSymbols, onError }: Pro
       onError?.("End date must be on or after start date");
       return;
     }
+    if (!validateRange()) return;
 
     setLoading(true);
     setResult(null);
     setRangeProgress(null);
+    abortRef.current?.abort();
 
     const sym = symbol.trim().toUpperCase();
 
@@ -375,10 +467,12 @@ export default function IntradayBacktestPanel({ watchlistSymbols, onError }: Pro
         setResult(res);
       }
     } catch (e) {
-      onError?.(e instanceof Error ? e.message : "Backtest failed");
+      if (!(e instanceof DOMException && e.name === "AbortError")) {
+        onError?.(e instanceof Error ? e.message : "Backtest failed");
+      }
     } finally {
       setLoading(false);
-      setRangeProgress(null);
+      abortRef.current = null;
     }
   };
 
@@ -389,7 +483,7 @@ export default function IntradayBacktestPanel({ watchlistSymbols, onError }: Pro
           <strong>Replay backtest</strong>
           <span>
             Pick any US symbol and date (or range) — reruns <em>current</em> intraday rules on Yahoo 5m/15m
-            history and simulates hit or fail for each trading day.
+            history. Range replays up to {INTRADAY_MAX_RANGE_TRADING_DAYS} trading days.
           </span>
         </div>
       </div>
@@ -403,6 +497,7 @@ export default function IntradayBacktestPanel({ watchlistSymbols, onError }: Pro
             value={symbol}
             onChange={(e) => setSymbol(e.target.value.toUpperCase())}
             placeholder="AAPL"
+            disabled={loading}
           />
           <datalist id="intraday-backtest-symbols">
             {watchlistSymbols.map((s) => (
@@ -412,31 +507,49 @@ export default function IntradayBacktestPanel({ watchlistSymbols, onError }: Pro
         </label>
         <label className="intraday-date-field">
           <span>{isRange ? "From" : "Date"}</span>
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            disabled={loading}
+          />
         </label>
         <label className="intraday-date-field">
           <span>To (optional)</span>
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} min={startDate || undefined} />
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            min={startDate || undefined}
+            disabled={loading}
+          />
         </label>
-        <button
-          type="button"
-          className="btn btn-primary intraday-replay-btn"
-          onClick={runReplay}
-          disabled={loading || !startDate}
-        >
-          {loading
-            ? isRange && rangeProgress
-              ? `Day ${rangeProgress.done} of ${rangeProgress.total}…`
-              : "Replaying…"
-            : isRange
-              ? "Run range replay"
-              : "Run replay"}
-        </button>
+        <div className="intraday-replay-actions">
+          <button
+            type="button"
+            className="btn btn-primary intraday-replay-btn"
+            onClick={runReplay}
+            disabled={loading || !startDate}
+          >
+            {loading
+              ? isRange && rangeProgress
+                ? `Day ${rangeProgress.done} of ${rangeProgress.total}…`
+                : "Replaying…"
+              : isRange
+                ? "Run range replay"
+                : "Run replay"}
+          </button>
+          {loading && isRange && (
+            <button type="button" className="btn btn-ghost intraday-stop-btn" onClick={stopReplay}>
+              Stop
+            </button>
+          )}
+        </div>
       </div>
 
       {result &&
         (isRangeResult(result) ? (
-          <RangeResult result={result} progress={rangeProgress} />
+          <RangeResult result={result} progress={rangeProgress} onStop={stopReplay} />
         ) : (
           <SingleDayResult result={result} />
         ))}
