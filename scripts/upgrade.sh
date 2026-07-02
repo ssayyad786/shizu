@@ -152,18 +152,26 @@ systemctl daemon-reload
 systemctl enable market-monitor nginx certbot-renew.timer 2>/dev/null || true
 systemctl start certbot-renew.timer 2>/dev/null || true
 systemctl restart market-monitor nginx
-sleep 3
 
-if ! systemctl is-active --quiet market-monitor; then
-  warn "market-monitor service is not running — API will return 502 Bad Gateway"
-  journalctl -u market-monitor -n 40 --no-pager || true
-  die "Backend failed to start. Fix errors above, then: sudo systemctl restart market-monitor"
-fi
+log "Waiting for backend (up to 90s)..."
+HEALTH_OK=0
+for _ in $(seq 1 30); do
+  if ! systemctl is-active --quiet market-monitor; then
+    warn "market-monitor service is not running"
+    journalctl -u market-monitor -n 40 --no-pager || true
+    die "Backend failed to start. Fix errors above, then: sudo systemctl restart market-monitor"
+  fi
+  if curl -sf http://127.0.0.1:8000/api/health >/dev/null; then
+    HEALTH_OK=1
+    break
+  fi
+  sleep 3
+done
 
-if ! curl -sf http://127.0.0.1:8000/api/health >/dev/null; then
-  warn "Backend process up but /api/health failed on port 8000"
+if [[ "$HEALTH_OK" -ne 1 ]]; then
+  warn "Backend did not pass /api/health within 90s"
   journalctl -u market-monitor -n 40 --no-pager || true
-  die "Health check failed — see logs above"
+  die "Health check timed out — backend may still be starting; try: curl http://127.0.0.1:8000/api/health"
 fi
 
 log "Backend health: OK"
