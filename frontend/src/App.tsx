@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, BulkAddResult, Market, StockDetail, StockSelection, StockSignal, WishlistItem } from "./api";
+import { api, BulkAddResult, HoldingItem, Market, StockDetail, StockSelection, StockSignal, WishlistItem } from "./api";
 import HelpPanel from "./components/HelpPanel";
 import AppFooter from "./components/AppFooter";
 import BrandMark from "./components/BrandMark";
@@ -28,6 +28,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [activeMarket, setActiveMarket] = useState<Market>("US");
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
+  const [holdings, setHoldings] = useState<HoldingItem[]>([]);
   const [signals, setSignals] = useState<StockSignal[]>([]);
   const [opportunities, setOpportunities] = useState<StockSignal[]>([]);
   const [lastScan, setLastScan] = useState<string | null>(null);
@@ -86,6 +87,23 @@ export default function App() {
     }
   }, []);
 
+  const loadHoldings = useCallback(async () => {
+    try {
+      const items = await api.getHoldings();
+      setHoldings(items);
+    } catch {
+      /* backend may not be ready yet */
+    }
+  }, []);
+
+  const holdingsCounts = useMemo(
+    () => ({
+      US: holdings.filter((h) => h.market === "US").length,
+      IN: holdings.filter((h) => h.market === "IN").length,
+    }),
+    [holdings]
+  );
+
   const loadDetail = useCallback(async (pick: StockSelection, p = period) => {
     setLoading(true);
     setDetailError("");
@@ -106,10 +124,11 @@ export default function App() {
 
   useEffect(() => {
     loadWishlist();
+    loadHoldings();
     refreshSignals();
     const interval = setInterval(refreshSignals, 30000);
     return () => clearInterval(interval);
-  }, [loadWishlist, refreshSignals]);
+  }, [loadWishlist, loadHoldings, refreshSignals]);
 
   useEffect(() => {
     if (selected) {
@@ -396,6 +415,8 @@ export default function App() {
           <HoldingsPanel
             market={activeMarket}
             onMarketChange={handleMarketChange}
+            holdingsCounts={holdingsCounts}
+            onHoldingsChange={loadHoldings}
           />
         ) : (
           <>

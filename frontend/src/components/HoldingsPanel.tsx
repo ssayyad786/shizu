@@ -1,20 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   api,
-  ApiError,
   currencyForMarket,
   HoldingFormData,
   HoldingSignal,
   Market,
 } from "../api";
-import { getHoldingsSession, HoldingsSession, setHoldingsSession } from "../holdingsAuth";
 import HoldingsAdd from "./HoldingsAdd";
-import HoldingsAuthGate from "./HoldingsAuthGate";
 import MarketTabs from "./MarketTabs";
 
 interface Props {
   market: Market;
   onMarketChange: (market: Market) => void;
+  holdingsCounts: { US: number; IN: number };
+  onHoldingsChange?: () => void;
 }
 
 function fmt(n: number | null | undefined, market: Market) {
@@ -179,95 +178,34 @@ function HoldingCard({
   );
 }
 
-export default function HoldingsPanel({ market, onMarketChange }: Props) {
-  const [session, setSession] = useState<HoldingsSession | null>(null);
-  const [authChecked, setAuthChecked] = useState(false);
+export default function HoldingsPanel({ market, onMarketChange, holdingsCounts, onHoldingsChange }: Props) {
   const [signals, setSignals] = useState<HoldingSignal[]>([]);
   const [sellAlerts, setSellAlerts] = useState<HoldingSignal[]>([]);
   const [lastScan, setLastScan] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
 
-  const holdingsCounts = useMemo(
-    () => ({
-      US: signals.filter((s) => (s.market || "US") === "US").length,
-      IN: signals.filter((s) => (s.market || "IN") === "IN").length,
-    }),
-    [signals]
-  );
-
-  const refresh = useCallback(
-    async (silent = false) => {
-      if (!getHoldingsSession()) return;
-      if (!silent) setLoading(true);
-      try {
-        const data = await api.getHoldingsSignals(market);
-        setSignals(data.signals);
-        setSellAlerts(data.sell_alerts);
-        setLastScan(data.last_scan);
-        setError("");
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to load holdings";
-        if (e instanceof ApiError && e.status === 401) {
-          setHoldingsSession(null);
-          setSession(null);
-        }
-        setError(msg);
-      } finally {
-        if (!silent) setLoading(false);
-      }
-    },
-    [market]
-  );
-
-  useEffect(() => {
-    const stored = getHoldingsSession();
-    if (!stored) {
-      setAuthChecked(true);
-      return;
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const data = await api.getHoldingsSignals(market);
+      setSignals(data.signals);
+      setSellAlerts(data.sell_alerts);
+      setLastScan(data.last_scan);
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load holdings");
+    } finally {
+      if (!silent) setLoading(false);
     }
-    api
-      .getHoldingProfileMe()
-      .then(() => setSession(stored))
-      .catch(() => setHoldingsSession(null))
-      .finally(() => setAuthChecked(true));
-  }, []);
+  }, [market]);
 
   useEffect(() => {
-    if (!session) return;
     refresh();
     const interval = setInterval(() => refresh(true), 60000);
     return () => clearInterval(interval);
-  }, [refresh, session]);
-
-  const handleAuthenticated = async (s: HoldingsSession) => {
-    setHoldingsSession(s);
-    setError("");
-    try {
-      await api.getHoldingProfileMe();
-      setSession(s);
-    } catch (e) {
-      setHoldingsSession(null);
-      setSession(null);
-      setError(e instanceof Error ? e.message : "Sign-in failed — please try again");
-      throw e;
-    }
-  };
-
-  const handleSignOut = async () => {
-    try {
-      await api.logoutHoldingProfile();
-    } catch {
-      /* clear local session even if logout request fails */
-    }
-    setHoldingsSession(null);
-    setSession(null);
-    setSignals([]);
-    setSellAlerts([]);
-    setLastScan(null);
-    setError("");
-  };
+  }, [refresh]);
 
   const handleAdd = async (data: HoldingFormData) => {
     setError("");
@@ -279,17 +217,20 @@ export default function HoldingsPanel({ market, onMarketChange }: Props) {
     });
     await api.triggerHoldingsScan();
     await refresh(true);
+    onHoldingsChange?.();
   };
 
   const handleRemove = async (symbol: string, m: Market) => {
     await api.removeHolding(symbol, m);
     await refresh(true);
+    onHoldingsChange?.();
   };
 
   const handleUpdate = async (symbol: string, m: Market, avg_cost: number, shares?: number) => {
     await api.updateHolding(symbol, m, { avg_cost, shares });
     await api.triggerHoldingsScan();
     await refresh(true);
+    onHoldingsChange?.();
   };
 
   const handleScan = async () => {
@@ -302,27 +243,10 @@ export default function HoldingsPanel({ market, onMarketChange }: Props) {
     }
   };
 
-  if (!authChecked) {
-    return <div className="loading-hint">Checking session…</div>;
-  }
-
-  if (!session) {
-    return <HoldingsAuthGate onAuthenticated={handleAuthenticated} />;
-  }
-
   const sellForMarket = sellAlerts;
 
   return (
     <div className="holdings-panel">
-      <div className="holdings-session-bar">
-        <span>
-          Signed in as <strong>{session.username}</strong>
-        </span>
-        <button type="button" className="btn btn-ghost" onClick={handleSignOut}>
-          Sign out
-        </button>
-      </div>
-
       <div className="holdings-toolbar">
         <MarketTabs
           activeMarket={market}

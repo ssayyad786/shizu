@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.7.4
+Version:        1.7.6
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,10 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Thu Jul 02 2026 Shizu <admin@localhost> - 1.7.6-1
+- upgrade.sh: fail fast if backend down (502); add scripts/fix-backend.sh
+* Thu Jul 02 2026 Shizu <admin@localhost> - 1.7.5-1
+- Revert holdings user profiles — back to simple shared holdings (no login)
 * Thu Jul 02 2026 Shizu <admin@localhost> - 1.7.4-1
 - Fix upgrade.sh wiping certbot HTTPS config (site unreachable on :443)
 * Thu Jul 02 2026 Shizu <admin@localhost> - 1.7.3-1

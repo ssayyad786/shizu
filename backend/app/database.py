@@ -196,31 +196,32 @@ def _rebuild_wishlist_table(cur: sqlite3.Cursor) -> None:
 
 
 
-def _holdings_needs_profile_migration(cur: sqlite3.Cursor) -> bool:
+def _holdings_uses_profiles(cur: sqlite3.Cursor) -> bool:
     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='holdings'")
     if not cur.fetchone():
         return False
-    if not _column_exists(cur, "holdings", "profile_id"):
-        return True
-    cur.execute("PRAGMA index_list(holdings)")
-    for _seq, name, unique, *_rest in cur.fetchall():
-        if not unique or name == "uq_holdings_profile_symbol_market":
-            continue
-        cur.execute(f"PRAGMA index_info({name!r})")
-        cols = [row[2] for row in cur.fetchall()]
-        if cols == ["symbol", "market"] or cols == ["market", "symbol"]:
-            return True
-    return False
+    return _column_exists(cur, "holdings", "profile_id")
 
 
-def _rebuild_holdings_table(cur: sqlite3.Cursor) -> None:
-    """Drop legacy global holdings; new rows require a profile."""
+def _rebuild_holdings_global(cur: sqlite3.Cursor) -> None:
+    """Revert holdings to shared list (no per-user profiles)."""
+    rows: list[tuple] = []
+    if _column_exists(cur, "holdings", "profile_id"):
+        cur.execute(
+            """
+            SELECT symbol, market, name, avg_cost, shares, purchase_date, created_at
+            FROM holdings
+            ORDER BY created_at ASC
+            """
+        )
+        rows = cur.fetchall()
+
     cur.execute("DROP TABLE IF EXISTS holdings")
+    cur.execute("DROP TABLE IF EXISTS holding_profiles")
     cur.execute(
         """
         CREATE TABLE holdings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            profile_id INTEGER NOT NULL REFERENCES holding_profiles(id),
             symbol VARCHAR(20) NOT NULL,
             market VARCHAR(4) NOT NULL DEFAULT 'US',
             name VARCHAR(120),
@@ -228,14 +229,28 @@ def _rebuild_holdings_table(cur: sqlite3.Cursor) -> None:
             shares FLOAT,
             purchase_date DATETIME,
             created_at DATETIME,
-            UNIQUE (profile_id, symbol, market)
+            UNIQUE (symbol, market)
         )
         """
     )
     cur.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_holdings_profile_symbol_market "
-        "ON holdings (profile_id, symbol, market)"
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_holdings_symbol_market "
+        "ON holdings (symbol, market)"
     )
+
+    seen: set[tuple[str, str]] = set()
+    for symbol, market, name, avg_cost, shares, purchase_date, created_at in rows:
+        key = (str(symbol).upper(), str(market).upper())
+        if key in seen:
+            continue
+        seen.add(key)
+        cur.execute(
+            """
+            INSERT INTO holdings (symbol, market, name, avg_cost, shares, purchase_date, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (key[0], key[1], name, avg_cost, shares, purchase_date, created_at),
+        )
 
 
 def migrate_db() -> None:
@@ -334,8 +349,8 @@ def migrate_db() -> None:
 
         )
 
-        if _holdings_needs_profile_migration(cur):
-            _rebuild_holdings_table(cur)
+        if _holdings_uses_profiles(cur):
+            _rebuild_holdings_global(cur)
 
         conn.commit()
 
@@ -351,7 +366,6 @@ def init_db():
 
     from app.models import (  # noqa: F401
         HoldingItem,
-        HoldingProfile,
         IntradaySignalHistory,
         IntradayWatchlistItem,
         MarketTradeStats,

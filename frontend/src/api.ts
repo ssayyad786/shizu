@@ -1,15 +1,4 @@
-import { holdingsAuthHeaders } from "./holdingsAuth";
-
 export type Market = "US" | "IN";
-
-export class ApiError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-  }
-}
 
 export interface StockSearchResult {
   symbol: string;
@@ -81,18 +70,6 @@ export interface HoldingFormData {
   avg_cost: number;
   shares?: number;
   purchase_date?: string;
-}
-
-export interface HoldingsAuthResponse {
-  token: string;
-  username: string;
-  profile_id: number;
-}
-
-export interface HoldingProfilePublic {
-  username: string;
-  created_at: string;
-  holdings_count: number;
 }
 
 export interface IntradayWatchlistItem {
@@ -485,18 +462,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     if (res.status === 504) {
       throw new Error("Server timed out — try again in a moment");
     }
-    throw new ApiError(message || "Request failed", res.status);
+    throw new Error(message || "Request failed");
   }
   return res.json();
-}
-
-async function holdingsRequest<T>(path: string, options?: RequestInit): Promise<T> {
-  const extra = (options?.headers as Record<string, string> | undefined) ?? {};
-  return request<T>(path, {
-    credentials: "include",
-    ...options,
-    headers: { ...holdingsAuthHeaders(), ...extra },
-  });
 }
 
 export type IntradayReportFormat = "json" | "csv";
@@ -576,35 +544,17 @@ export const api = {
     return request<HistoryPage>(`/history${qs ? `?${qs}` : ""}`);
   },
   getHoldings: async (market?: Market) => {
-    const items = await holdingsRequest<HoldingItem[]>(
+    const items = await request<HoldingItem[]>(
       market ? `/holdings?market=${market}` : "/holdings"
     );
     return items.map(normalizeHoldingItem);
   },
-  registerHoldingProfile: (username: string, password: string) =>
-    request<HoldingsAuthResponse>("/holdings/auth/register", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: username.trim().toLowerCase(), password }),
-    }),
-  loginHoldingProfile: (username: string, password: string) =>
-    request<HoldingsAuthResponse>("/holdings/auth/login", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: username.trim().toLowerCase(), password }),
-    }),
-  logoutHoldingProfile: () =>
-    request<{ ok: boolean }>("/holdings/auth/logout", { method: "POST", credentials: "include" }),
-  getHoldingProfileMe: () => holdingsRequest<{ username: string; profile_id: number; created_at: string }>("/holdings/auth/me"),
-  listHoldingProfiles: () => request<HoldingProfilePublic[]>("/holdings/profiles"),
   addHolding: (
     symbol: string,
     market: Market,
     body: { avg_cost: number; shares?: number; purchase_date?: string; name?: string }
   ) =>
-    holdingsRequest<HoldingSignal>("/holdings", {
+    request<HoldingSignal>("/holdings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ symbol, market, ...body }),
@@ -614,21 +564,21 @@ export const api = {
     market: Market,
     body: { avg_cost?: number; shares?: number; purchase_date?: string; name?: string }
   ) =>
-    holdingsRequest<HoldingItem>(`/holdings/${symbol}?market=${market}`, {
+    request<HoldingItem>(`/holdings/${symbol}?market=${market}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
   removeHolding: (symbol: string, market: Market) =>
-    holdingsRequest<{ ok: boolean }>(`/holdings/${symbol}?market=${market}`, { method: "DELETE" }),
+    request<{ ok: boolean }>(`/holdings/${symbol}?market=${market}`, { method: "DELETE" }),
   getHoldingsSignals: (market?: Market) =>
-    holdingsRequest<{
+    request<{
       signals: HoldingSignal[];
       sell_alerts: HoldingSignal[];
       last_scan: string | null;
     }>(market ? `/holdings/signals?market=${market}` : "/holdings/signals"),
   triggerHoldingsScan: () =>
-    holdingsRequest<{ scanned: number; sell_alerts: HoldingSignal[]; signals: HoldingSignal[] }>(
+    request<{ scanned: number; sell_alerts: HoldingSignal[]; signals: HoldingSignal[] }>(
       "/holdings/scan",
       { method: "POST" }
     ),

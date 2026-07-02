@@ -152,7 +152,21 @@ systemctl daemon-reload
 systemctl enable market-monitor nginx certbot-renew.timer 2>/dev/null || true
 systemctl start certbot-renew.timer 2>/dev/null || true
 systemctl restart market-monitor nginx
-sleep 2
+sleep 3
+
+if ! systemctl is-active --quiet market-monitor; then
+  warn "market-monitor service is not running — API will return 502 Bad Gateway"
+  journalctl -u market-monitor -n 40 --no-pager || true
+  die "Backend failed to start. Fix errors above, then: sudo systemctl restart market-monitor"
+fi
+
+if ! curl -sf http://127.0.0.1:8000/api/health >/dev/null; then
+  warn "Backend process up but /api/health failed on port 8000"
+  journalctl -u market-monitor -n 40 --no-pager || true
+  die "Health check failed — see logs above"
+fi
+
+log "Backend health: OK"
 
 # --- Restore HTTPS if certificate exists but 443 is down ---
 restore_https() {
