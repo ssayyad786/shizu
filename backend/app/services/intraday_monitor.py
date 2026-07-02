@@ -10,6 +10,7 @@ from app.models import IntradayWatchlistItem
 from app.services.intraday_history import save_intraday_signal, signal_to_api_dict, update_open_intraday
 from app.services.intraday_signals import analyze_intraday
 from app.services.market_data import fetch_history
+from app.services.search import resolve_symbol_name
 from app.services.us_market_hours import get_us_market_status, market_status_to_dict
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ def remove_cached_intraday(symbol: str) -> None:
     _intraday_signals.pop(symbol.upper(), None)
 
 
-def scan_intraday_symbol(symbol: str, db: Session | None = None) -> dict:
+def scan_intraday_symbol(symbol: str, db: Session | None = None, name: str | None = None) -> dict:
     symbol = symbol.upper()
     df_5m = fetch_history(symbol, period="5d", interval="5m")
     df_15m = fetch_history(symbol, period="5d", interval="15m")
@@ -46,6 +47,8 @@ def scan_intraday_symbol(symbol: str, db: Session | None = None) -> dict:
     result = signal_to_api_dict(signal)
     result["scanned_at"] = datetime.utcnow().isoformat()
     result["is_today_setup"] = signal.actionable
+    if name:
+        result["name"] = name
 
     _intraday_signals[symbol] = result
 
@@ -79,12 +82,15 @@ def scan_intraday_watchlist(db: Session | None = None) -> list[dict]:
 
         results = []
         for item in items:
+            display_name = item.name or resolve_symbol_name(item.symbol)
             try:
-                results.append(scan_intraday_symbol(item.symbol, db=db))
+                result = scan_intraday_symbol(item.symbol, db=db, name=display_name)
+                results.append(result)
             except Exception as e:
                 logger.warning("Intraday scan failed for %s: %s", item.symbol, e)
                 failed = {
                     "symbol": item.symbol,
+                    "name": display_name,
                     "direction": "HOLD",
                     "confidence": 0,
                     "price": 0,
@@ -161,6 +167,7 @@ def build_intraday_signals_payload(db: Session) -> dict:
 
     for item in items:
         sym = item.symbol.upper()
+        display_name = item.name or resolve_symbol_name(item.symbol)
         cached_signal = cache_by_symbol.get(sym)
         state = classify_scan_state(cached_signal, market["is_open"])
         counts[state] += 1
@@ -168,13 +175,14 @@ def build_intraday_signals_payload(db: Session) -> dict:
         if cached_signal:
             row = {
                 **cached_signal,
+                "name": cached_signal.get("name") or display_name,
                 "scan_state": state,
                 "scan_age_sec": _scan_age_seconds(cached_signal.get("scanned_at")),
             }
         else:
             row = {
                 "symbol": sym,
-                "name": item.name,
+                "name": display_name,
                 "direction": "HOLD",
                 "confidence": 0,
                 "price": 0,

@@ -1750,6 +1750,110 @@ input {
   gap: 24px;
 }
 
+.holdings-session-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  font-size: 0.9rem;
+}
+
+.holdings-auth {
+  display: grid;
+  gap: 28px;
+  max-width: 720px;
+}
+
+.holdings-auth-card,
+.holdings-profiles-list {
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  background: var(--surface-1, rgba(0, 0, 0, 0.2));
+}
+
+.holdings-auth-lead {
+  margin: 0 0 16px;
+  color: var(--text-muted, #9ca3af);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.holdings-auth-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.holdings-auth-tab {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.holdings-auth-tab.active {
+  border-color: var(--accent, #3b82f6);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.holdings-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.holdings-auth-error {
+  color: #f87171;
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+}
+
+.holdings-auth-submit {
+  margin-top: 8px;
+  align-self: flex-start;
+}
+
+.holdings-profiles-empty {
+  color: var(--text-muted, #9ca3af);
+  margin: 0;
+}
+
+.holdings-profiles-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.holdings-profile-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.03));
+}
+
+.holdings-profile-name {
+  font-weight: 600;
+}
+
+.holdings-profile-meta {
+  font-size: 0.85rem;
+  color: var(--text-muted, #9ca3af);
+}
+
 .holdings-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -2679,9 +2783,27 @@ input {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  justify-content: space-between;
+  gap: 8px 16px;
   flex: 1;
   min-width: 0;
+}
+
+.intraday-card-identity {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.intraday-card-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  flex: 1 1 16rem;
 }
 
 .intraday-dir-pill {
@@ -2714,9 +2836,12 @@ input {
 }
 
 .intraday-name-inline {
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   color: var(--muted);
-  max-width: 140px;
+  font-weight: 400;
+  font-family: inherit;
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

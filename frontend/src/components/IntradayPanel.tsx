@@ -204,23 +204,28 @@ const SetupCard = memo(function SetupCard({
           {open ? "▾" : "▸"}
         </span>
         <div className="intraday-card-summary">
-          <span className="intraday-symbol">{signal.symbol}</span>
-          <span className={`intraday-scan-pill ${scanMeta.className}`} title={signal.summary}>
-            <span className={`scan-dot ${scanMeta.className}`} />
-            {scanMeta.label}
-            {signal.scan_age_sec != null && signal.scan_state === "fresh" && (
-              <span className="intraday-scan-age"> {formatScanAge(signal.scan_age_sec)}</span>
+          <div className="intraday-card-identity">
+            <span className="intraday-symbol">{signal.symbol}</span>
+            {signal.name && <span className="intraday-name-inline">{signal.name}</span>}
+          </div>
+          <div className="intraday-card-metrics">
+            <span className={`intraday-scan-pill ${scanMeta.className}`} title={signal.summary}>
+              <span className={`scan-dot ${scanMeta.className}`} />
+              {scanMeta.label}
+              {signal.scan_age_sec != null && signal.scan_state === "fresh" && (
+                <span className="intraday-scan-age"> {formatScanAge(signal.scan_age_sec)}</span>
+              )}
+            </span>
+            <span className={`intraday-dir-pill ${tone}`}>{signal.direction}</span>
+            <span className="intraday-summary-stat">{signal.confidence}%</span>
+            {plan && (
+              <>
+                <span className="intraday-summary-stat">@ {fmt(plan.entry_price)}</span>
+                <span className="intraday-summary-stat target-text">T1 {fmt(plan.target_1)}</span>
+                <span className="intraday-summary-stat stop-text">Stop {fmt(plan.stop_loss)}</span>
+              </>
             )}
-          </span>
-          <span className={`intraday-dir-pill ${tone}`}>{signal.direction}</span>
-          <span className="intraday-summary-stat">{signal.confidence}%</span>
-          {plan && (
-            <>
-              <span className="intraday-summary-stat">@ {fmt(plan.entry_price)}</span>
-              <span className="intraday-summary-stat target-text">T1 {fmt(plan.target_1)}</span>
-              <span className="intraday-summary-stat stop-text">Stop {fmt(plan.stop_loss)}</span>
-            </>
-          )}
+          </div>
         </div>
         {showTodayBadge && signal.actionable && (
           <span className="intraday-badge-today">Today</span>
@@ -336,21 +341,25 @@ const TradeCard = memo(function TradeCard({
           {open ? "▾" : "▸"}
         </span>
         <div className="intraday-card-summary">
-          <span className="intraday-symbol">{record.symbol}</span>
-          {record.name && <span className="intraday-name-inline">{record.name}</span>}
-          <span className={`intraday-dir-pill ${tone}`}>{record.direction}</span>
-          <span className="intraday-summary-stat">@ {fmt(record.entry_price)}</span>
-          <span className={`intraday-status-inline ${st.className}`}>{st.text}</span>
-          {record.progress_pct != null && record.status === "open" && (
-            <span className={`intraday-summary-stat ${record.progress_pct >= 0 ? "pnl-up" : "pnl-down"}`}>
-              {record.progress_pct > 0 ? "+" : ""}{record.progress_pct}%
-            </span>
-          )}
-          {record.result_pct != null && record.status !== "open" && (
-            <span className={`intraday-summary-stat ${record.result_pct >= 0 ? "pnl-up" : "pnl-down"}`}>
-              {record.result_pct > 0 ? "+" : ""}{record.result_pct}%
-            </span>
-          )}
+          <div className="intraday-card-identity">
+            <span className="intraday-symbol">{record.symbol}</span>
+            {record.name && <span className="intraday-name-inline">{record.name}</span>}
+          </div>
+          <div className="intraday-card-metrics">
+            <span className={`intraday-dir-pill ${tone}`}>{record.direction}</span>
+            <span className="intraday-summary-stat">@ {fmt(record.entry_price)}</span>
+            <span className={`intraday-status-inline ${st.className}`}>{st.text}</span>
+            {record.progress_pct != null && record.status === "open" && (
+              <span className={`intraday-summary-stat ${record.progress_pct >= 0 ? "pnl-up" : "pnl-down"}`}>
+                {record.progress_pct > 0 ? "+" : ""}{record.progress_pct}%
+              </span>
+            )}
+            {record.result_pct != null && record.status !== "open" && (
+              <span className={`intraday-summary-stat ${record.result_pct >= 0 ? "pnl-up" : "pnl-down"}`}>
+                {record.result_pct > 0 ? "+" : ""}{record.result_pct}%
+              </span>
+            )}
+          </div>
         </div>
       </button>
 
@@ -389,6 +398,18 @@ function StatsBar({ stats }: { stats: IntradayStats }) {
       <div className="intraday-stat"><span>Open</span><strong>{stats.open}</strong></div>
     </div>
   );
+}
+
+function enrichSignalNames(
+  items: IntradayLiveSignal[],
+  watchlist: IntradayWatchlistItem[]
+): IntradayLiveSignal[] {
+  if (watchlist.length === 0) return items;
+  const names = new Map(watchlist.map((w) => [w.symbol.toUpperCase(), w.name]));
+  return items.map((s) => ({
+    ...s,
+    name: s.name || names.get(s.symbol.toUpperCase()) || undefined,
+  }));
 }
 
 export default function IntradayPanel() {
@@ -440,6 +461,11 @@ export default function IntradayPanel() {
   }, [refresh]);
 
   const watchlistSymbols = useMemo(() => watchlist.map((w) => w.symbol), [watchlist]);
+  const liveSignals = useMemo(() => enrichSignalNames(signals, watchlist), [signals, watchlist]);
+  const todaySetupsNamed = useMemo(
+    () => enrichSignalNames(todaySetups, watchlist),
+    [todaySetups, watchlist]
+  );
   const openTodayTrades = useMemo(
     () => todayTrades.filter((t) => t.status === "open"),
     [todayTrades]
@@ -558,12 +584,12 @@ export default function IntradayPanel() {
         </div>
       </section>
 
-      {(todaySetups.length > 0 || openTodayTrades.length > 0) && (
+      {(todaySetupsNamed.length > 0 || openTodayTrades.length > 0) && (
         <section className="intraday-section intraday-today">
           <h2>Today&apos;s trades — ready for market order</h2>
           <p className="intraday-today-note">Tap a row to expand entry, targets, and why we suggest the trade.</p>
           <div className="intraday-card-list">
-            {todaySetups.map((s, i) => (
+            {todaySetupsNamed.map((s, i) => (
               <SetupCard key={`setup-${s.symbol}`} signal={s} showTodayBadge defaultOpen={i === 0} />
             ))}
             {openTodayTrades.map((t) => (
@@ -587,7 +613,7 @@ export default function IntradayPanel() {
             each row — green means data is fresh.
           </p>
           <div className="intraday-card-list">
-            {signals.map((s) => (
+            {liveSignals.map((s) => (
               <SetupCard key={s.symbol} signal={s} />
             ))}
           </div>

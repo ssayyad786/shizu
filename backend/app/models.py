@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -62,13 +62,27 @@ class MarketTradeStats(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class HoldingProfile(Base):
+    """Per-user holdings account — password-protected, isolated holdings data."""
+
+    __tablename__ = "holding_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class HoldingItem(Base):
     """Stocks the user owns — used for sell/hold recommendations."""
 
     __tablename__ = "holdings"
-    __table_args__ = (UniqueConstraint("symbol", "market", name="uq_holdings_symbol_market"),)
+    __table_args__ = (
+        UniqueConstraint("profile_id", "symbol", "market", name="uq_holdings_profile_symbol_market"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("holding_profiles.id"), index=True)
     symbol: Mapped[str] = mapped_column(String(20), index=True)
     market: Mapped[str] = mapped_column(String(4), default="US", index=True)
     name: Mapped[str | None] = mapped_column(String(120), nullable=True)

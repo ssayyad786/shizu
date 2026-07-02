@@ -196,6 +196,48 @@ def _rebuild_wishlist_table(cur: sqlite3.Cursor) -> None:
 
 
 
+def _holdings_needs_profile_migration(cur: sqlite3.Cursor) -> bool:
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='holdings'")
+    if not cur.fetchone():
+        return False
+    if not _column_exists(cur, "holdings", "profile_id"):
+        return True
+    cur.execute("PRAGMA index_list(holdings)")
+    for _seq, name, unique, *_rest in cur.fetchall():
+        if not unique or name == "uq_holdings_profile_symbol_market":
+            continue
+        cur.execute(f"PRAGMA index_info({name!r})")
+        cols = [row[2] for row in cur.fetchall()]
+        if cols == ["symbol", "market"] or cols == ["market", "symbol"]:
+            return True
+    return False
+
+
+def _rebuild_holdings_table(cur: sqlite3.Cursor) -> None:
+    """Drop legacy global holdings; new rows require a profile."""
+    cur.execute("DROP TABLE IF EXISTS holdings")
+    cur.execute(
+        """
+        CREATE TABLE holdings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id INTEGER NOT NULL REFERENCES holding_profiles(id),
+            symbol VARCHAR(20) NOT NULL,
+            market VARCHAR(4) NOT NULL DEFAULT 'US',
+            name VARCHAR(120),
+            avg_cost FLOAT NOT NULL,
+            shares FLOAT,
+            purchase_date DATETIME,
+            created_at DATETIME,
+            UNIQUE (profile_id, symbol, market)
+        )
+        """
+    )
+    cur.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_holdings_profile_symbol_market "
+        "ON holdings (profile_id, symbol, market)"
+    )
+
+
 def migrate_db() -> None:
 
     """Apply lightweight SQLite migrations for existing installs."""
@@ -292,7 +334,8 @@ def migrate_db() -> None:
 
         )
 
-
+        if _holdings_needs_profile_migration(cur):
+            _rebuild_holdings_table(cur)
 
         conn.commit()
 
@@ -308,6 +351,7 @@ def init_db():
 
     from app.models import (  # noqa: F401
         HoldingItem,
+        HoldingProfile,
         IntradaySignalHistory,
         IntradayWatchlistItem,
         MarketTradeStats,

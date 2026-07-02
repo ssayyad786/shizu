@@ -4,7 +4,7 @@
 %global debug_package %{nil}
 
 Name:           %{appname}
-Version:        1.6.2
+Version:        1.7.1
 Release:        1%{?dist}
 Summary:        Stock market monitor with technical analysis and trade signals
 License:        MIT
@@ -122,6 +122,11 @@ systemctl try-restart nginx >/dev/null 2>&1 || :
 %{appdir}/scripts/backup-data.sh
 
 %changelog
+* Thu Jul 02 2026 Shizu <admin@localhost> - 1.7.1-1
+- Intraday live signals: show company name beside ticker, better row layout
+* Thu Jul 02 2026 Shizu <admin@localhost> - 1.7.0-1
+- Holdings: per-user profiles with password auth, private saved positions
+- Public profile username list; server-only password reset CLI
 * Thu Jul 02 2026 Shizu <admin@localhost> - 1.6.2-1
 - Intraday: per-symbol scan status pills and coverage bar (fresh/stale/failed)
 - Replay backtest: stop button, range limits, lighter payloads, Yahoo frame cache
